@@ -1,0 +1,1093 @@
+// ===========================================================================
+//  AI-Powered Employee Onboarding Orchestrator
+//  PostgreSQL schema  ·  owner: Himanshu (schema / auth / CI)
+//
+//  Domains
+//    1. Identity & access control      7 models
+//    2. Organisation & worker          3 models
+//    3. Policy knowledge base          2 models   (grounding corpus for the LLM)
+//    4. Deterministic rules            1 model    (the statutory floor)
+//    5. Onboarding plan spine          4 models
+//    6. Workflow services             12 models   (six service areas)
+//    7. Harness & audit evidence       4 models
+//    8. Notifications                  1 model
+// ===========================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector, citext]
+}
+
+// ===========================================================================
+//  ENUMS
+// ===========================================================================
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  LOCKED
+}
+
+/// Scope narrows a permission to the rows an actor may touch.
+///   SELF       -> only rows about the actor's own employee record
+///   REPORTS    -> the actor's direct reports (manager chain, depth 1)
+///   DEPARTMENT -> any employee in the actor's department
+///   ORG        -> everything in the tenant
+enum PermissionScope {
+  SELF
+  REPORTS
+  DEPARTMENT
+  ORG
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACTOR
+  INTERN
+}
+
+enum WorkMode {
+  REMOTE
+  ONSITE
+  HYBRID
+}
+
+enum EmployeeStatus {
+  PRE_HIRE
+  ONBOARDING
+  ACTIVE
+  WITHDRAWN
+}
+
+/// The six onboarding workflow services from the architecture diagram.
+enum ServiceArea {
+  DOCUMENTS
+  EQUIPMENT
+  PAYROLL
+  BENEFITS
+  TRAINING
+  MANAGER
+}
+
+enum OwnerRole {
+  HR
+  IT
+  FINANCE
+  MANAGER
+  EMPLOYEE
+  LND
+  COMPLIANCE
+}
+
+/// CLOSED VOCABULARY. Guardrail V8: the LLM may only propose tasks whose type
+/// appears here. An injected instruction cannot invent a new task type because
+/// anything outside this enum fails schema validation before it is persisted.
+enum TaskType {
+  // --- DOCUMENTS ---
+  COLLECT_ID_PROOF
+  COLLECT_ADDRESS_PROOF
+  COLLECT_EDUCATION_CERTIFICATE
+  COLLECT_PREVIOUS_EMPLOYMENT_PROOF
+  RIGHT_TO_WORK_CHECK
+  SIGN_EMPLOYMENT_CONTRACT
+  SIGN_NDA
+  BACKGROUND_VERIFICATION
+
+  // --- EQUIPMENT ---
+  PROVISION_LAPTOP
+  PROVISION_PERIPHERALS
+  PROVISION_MOBILE_DEVICE
+  ISSUE_ACCESS_BADGE
+  CREATE_SYSTEM_ACCOUNTS
+  GRANT_APPLICATION_ACCESS
+
+  // --- PAYROLL ---
+  COLLECT_TAX_DECLARATION
+  COLLECT_BANK_DETAILS
+  COLLECT_NATIONAL_ID
+  PAYROLL_PROFILE_SETUP
+  PAYROLL_FIRST_RUN_VERIFICATION
+
+  // --- BENEFITS ---
+  BENEFITS_ELECTION
+  PENSION_AUTO_ENROLMENT
+  MEDICAL_INSURANCE_ENROLMENT
+  DEPENDENT_DECLARATION
+
+  // --- TRAINING ---
+  MANDATORY_COMPLIANCE_TRAINING
+  HEALTH_AND_SAFETY_TRAINING
+  DATA_PROTECTION_TRAINING
+  ROLE_SPECIFIC_TRAINING
+
+  // --- MANAGER ---
+  ASSIGN_BUDDY
+  PREPARE_DAY_ONE_AGENDA
+  SCHEDULE_INTRO_MEETINGS
+  APPROVE_SYSTEM_ACCESS
+  SET_PROBATION_GOALS
+}
+
+/// Drives guardrail V7. PAY_AFFECTING and LEGAL tasks can never be dispatched
+/// without a named human approval recorded in audit_events.
+enum AuthorityClass {
+  ROUTINE
+  PAY_AFFECTING
+  LEGAL
+}
+
+enum DeadlineAnchor {
+  OFFER_DATE
+  PLAN_CREATED
+  START_DATE
+}
+
+enum DeadlineBasis {
+  CALENDAR_DAYS
+  BUSINESS_DAYS
+}
+
+enum PlanStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  REFUSED
+}
+
+/// LLM_GROUNDED      -> the model proposed and the validators accepted
+/// BASELINE_FALLBACK -> the model was unavailable or failed validation twice,
+///                      so the plan came from task_templates alone
+enum GenerationMode {
+  LLM_GROUNDED
+  BASELINE_FALLBACK
+}
+
+enum TaskOrigin {
+  TEMPLATE
+  LLM_ACCEPTED
+  LLM_REPAIRED
+  VALIDATOR_INSERTED
+  HUMAN_ADDED
+}
+
+enum ReviewState {
+  OK
+  NEEDS_REVIEW
+  ESCALATED
+  REJECTED
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  SKIPPED
+}
+
+enum DocumentStatus {
+  REQUESTED
+  UPLOADED
+  VERIFIED
+  REJECTED
+}
+
+enum EquipmentStatus {
+  REQUESTED
+  ORDERED
+  SHIPPED
+  DELIVERED
+  RETURNED
+}
+
+enum PayrollSetupStatus {
+  PENDING
+  AWAITING_TAX_FORM
+  AWAITING_BANK_DETAILS
+  READY
+  VERIFIED
+}
+
+enum BenefitEnrollmentStatus {
+  WINDOW_OPEN
+  ELECTED
+  WAIVED
+  WINDOW_CLOSED
+  AUTO_ENROLLED
+}
+
+enum TrainingStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum BenefitType {
+  MEDICAL
+  DENTAL
+  VISION
+  PENSION
+  LIFE_INSURANCE
+  WELLNESS
+}
+
+enum ManagerTaskKind {
+  BUDDY_ASSIGNMENT
+  DAY_ONE_AGENDA
+  INTRO_MEETINGS
+  ACCESS_APPROVAL
+  PROBATION_GOALS
+}
+
+/// The validator chain. Every finding records which gate fired.
+enum ValidatorId {
+  V1_SCHEMA
+  V2_CITATION_INTEGRITY
+  V3_JURISDICTION_SCOPE
+  V4_MANDATORY_COVERAGE
+  V5_GRAPH_INTEGRITY
+  V6_DEADLINE_RECOMPUTE
+  V7_AUTHORITY_GUARD
+  V8_CLOSED_VOCABULARY
+}
+
+enum FindingSeverity {
+  INFO
+  WARN
+  REJECT
+}
+
+enum FindingAction {
+  ACCEPTED
+  REPAIRED
+  REJECTED
+  FLAGGED
+  INSERTED
+}
+
+enum EscalationStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum AuthEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  TOKEN_REFRESHED
+  TOKEN_REUSE_DETECTED
+  PASSWORD_CHANGED
+  ACCOUNT_LOCKED
+  ROLE_GRANTED
+  ROLE_REVOKED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+// ===========================================================================
+//  DOMAIN 1 — IDENTITY & ACCESS CONTROL
+// ===========================================================================
+
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+  email              String     @unique @db.Citext
+  passwordHash       String?    @map("password_hash")
+  status             UserStatus @default(INVITED)
+  mustChangePassword Boolean    @default(true) @map("must_change_password")
+
+  /// Bumped on password change or forced logout. An access token carrying an
+  /// older tokenVersion is rejected, giving instant revocation with no blacklist.
+  tokenVersion     Int       @default(0) @map("token_version")
+  failedLoginCount Int       @default(0) @map("failed_login_count")
+  lockedUntil      DateTime? @map("locked_until") @db.Timestamptz
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  employee            Employee?
+  userRoles           UserRole[]
+  refreshTokens       RefreshToken[]
+  authEvents          AuthEvent[]
+  notifications       Notification[]
+  auditEvents         AuditEvent[]      @relation("AuditActor")
+  assignedTasks       PlanTask[]        @relation("TaskAssignee")
+  completedTasks      PlanTask[]        @relation("TaskCompletedBy")
+  approvedPlans       OnboardingPlan[]  @relation("PlanApprover")
+  createdPlans        OnboardingPlan[]  @relation("PlanCreator")
+  grantedRoles        UserRole[]        @relation("RoleGranter")
+  raisedEscalations   Escalation[]      @relation("EscalationRaiser")
+  resolvedEscalations Escalation[]      @relation("EscalationResolver")
+  verifiedDocuments   DocumentRequest[] @relation("DocumentVerifier")
+  uploadedDocuments   Document[]        @relation("DocumentUploader")
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  /// Stable machine key: hr_admin, manager, employee, it_admin, payroll_admin,
+  /// benefits_admin, lnd_admin, compliance_officer, system
+  key         String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  /// Canonical form "<resource>.<action>", e.g. "plan.approve".
+  key         String  @unique
+  resource    String
+  action      String
+  description String?
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@map("permissions")
+}
+
+/// Grants a permission to a role AT A SCOPE. The scope is what stops a manager
+/// reading another team's payroll data. It is enforced per request against the
+/// target row and is never read from the JWT.
+model RolePermission {
+  roleId       String          @map("role_id") @db.Uuid
+  permissionId String          @map("permission_id") @db.Uuid
+  scope        PermissionScope @default(ORG)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId      String   @map("user_id") @db.Uuid
+  roleId      String   @map("role_id") @db.Uuid
+  grantedById String?  @map("granted_by_id") @db.Uuid
+  grantedAt   DateTime @default(now()) @map("granted_at") @db.Timestamptz
+
+  user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("RoleGranter", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+/// Rotating refresh tokens. Only a SHA-256 hash is stored, never the token.
+/// familyId links a rotation chain: replaying an already-rotated token revokes
+/// the entire family (reuse detection).
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  familyId     String    @map("family_id") @db.Uuid
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz
+  replacedById String?   @unique @map("replaced_by_id") @db.Uuid
+  userAgent    String?   @map("user_agent")
+  ipAddress    String?   @map("ip_address")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy RefreshToken? @relation("TokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces   RefreshToken? @relation("TokenRotation")
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model AuthEvent {
+  id        BigInt        @id @default(autoincrement())
+  userId    String?       @map("user_id") @db.Uuid
+  email     String?
+  type      AuthEventType
+  success   Boolean
+  reason    String?
+  ipAddress String?       @map("ip_address")
+  userAgent String?       @map("user_agent")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("auth_events")
+}
+
+// ===========================================================================
+//  DOMAIN 2 — ORGANISATION & WORKER
+// ===========================================================================
+
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  employees Employee[]
+
+  @@map("departments")
+}
+
+/// A location whose employment rules differ. The business-day calendar lives
+/// here because validator V6 recomputes every deadline against it in code.
+model Jurisdiction {
+  code         String   @id /// 'CA-ON', 'GB', 'IN-KA', 'US-CA'
+  displayName  String   @map("display_name")
+  countryCode  String   @map("country_code") /// ISO 3166-1 alpha-2
+  /// ISO weekday numbers that count as working days (1 = Monday .. 7 = Sunday)
+  businessDays Int[]    @map("business_days")
+  holidays     DateTime[] @db.Date
+  timezone     String   @default("UTC")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  employees        Employee[]
+  policyDocuments  PolicyDocument[]
+  policyClauses    PolicyClause[]
+  taskTemplates    TaskTemplate[]
+  benefitPlans     BenefitPlan[]
+
+  @@map("jurisdictions")
+}
+
+model Employee {
+  id             String         @id @default(uuid()) @db.Uuid
+  /// Null until the new hire is invited to the employee portal.
+  userId         String?        @unique @map("user_id") @db.Uuid
+  employeeNumber String         @unique @map("employee_number")
+  firstName      String         @map("first_name")
+  lastName       String         @map("last_name")
+  workEmail      String?        @unique @map("work_email") @db.Citext
+  personalEmail  String         @map("personal_email") @db.Citext
+  phone          String?
+  departmentId   String?        @map("department_id") @db.Uuid
+  managerId      String?        @map("manager_id") @db.Uuid
+  jobTitle       String         @map("job_title")
+  /// Coarse grouping used by task templates, e.g. 'engineering', 'sales'.
+  roleFamily     String         @map("role_family")
+  employmentType EmploymentType @map("employment_type")
+  workMode       WorkMode       @map("work_mode")
+  jurisdictionCode String       @map("jurisdiction_code")
+  offerDate      DateTime?      @map("offer_date") @db.Date
+  startDate      DateTime       @map("start_date") @db.Date
+  unionMember    Boolean        @default(false) @map("union_member")
+  status         EmployeeStatus @default(PRE_HIRE)
+  /// Free text from the HR coordinator. UNTRUSTED: it reaches the prompt as
+  /// delimited data and is never treated as instruction. See guardrail V8.
+  notes          String?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department   Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  manager      Employee?     @relation("ManagerReports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports      Employee[]    @relation("ManagerReports")
+  jurisdiction Jurisdiction  @relation(fields: [jurisdictionCode], references: [code])
+
+  plans          OnboardingPlan[]
+  documents      Document[]
+  payrollSetups  PayrollSetup[]
+  buddyFor       ManagerTask[]    @relation("BuddyEmployee")
+
+  @@index([managerId])
+  @@index([departmentId])
+  @@index([jurisdictionCode])
+  @@index([status, startDate])
+  @@map("employees")
+}
+
+// ===========================================================================
+//  DOMAIN 3 — POLICY KNOWLEDGE BASE  (the approved grounding corpus)
+// ===========================================================================
+
+model PolicyDocument {
+  id               String    @id @default(uuid()) @db.Uuid
+  /// Null means the document applies globally.
+  jurisdictionCode String?   @map("jurisdiction_code")
+  title            String
+  category         String /// 'payroll' | 'benefits' | 'documents' | ...
+  sourceUri        String    @map("source_uri")
+  version          String
+  effectiveFrom    DateTime  @map("effective_from") @db.Date
+  /// Honesty flag. Every document in this challenge is author-written for
+  /// demonstration and is NOT legal guidance. Surfaced in the UI.
+  isMock           Boolean   @default(true) @map("is_mock")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  jurisdiction Jurisdiction?  @relation(fields: [jurisdictionCode], references: [code])
+  clauses      PolicyClause[]
+
+  @@unique([title, version])
+  @@index([jurisdictionCode, category])
+  @@map("policy_documents")
+}
+
+/// One citable clause. The id is a STABLE human-meaningful primary key such as
+/// 'CA-ON-BEN-004'. That is what makes validator V2 a join rather than a guess:
+/// a citation the model invents simply will not resolve.
+model PolicyClause {
+  id               String   @id
+  documentId       String   @map("document_id") @db.Uuid
+  jurisdictionCode String?  @map("jurisdiction_code")
+  heading          String?
+  body             String /// the citable source text
+  topics           String[] @default([])
+  /// nomic-embed-text produces 768 dimensions.
+  embedding        Unsupported("vector(768)")?
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  document     PolicyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  jurisdiction Jurisdiction?  @relation(fields: [jurisdictionCode], references: [code])
+  citations    TaskCitation[]
+
+  @@index([documentId])
+  @@index([jurisdictionCode])
+  @@map("policy_clauses")
+}
+
+// ===========================================================================
+//  DOMAIN 4 — DETERMINISTIC RULES  (the statutory floor)
+// ===========================================================================
+
+/// What MUST be in a plan regardless of what the model proposes. Validator V4
+/// inserts any mandatory template the model omitted; validator V6 recomputes
+/// every deadline from these rules rather than trusting the model's dates.
+model TaskTemplate {
+  id               String         @id @default(uuid()) @db.Uuid
+  taskType         TaskType       @map("task_type")
+  service          ServiceArea
+  title            String
+  description      String?
+  /// Null means the template applies in every jurisdiction.
+  jurisdictionCode String?        @map("jurisdiction_code")
+  /// Empty array means it applies to every employment type.
+  employmentTypes  EmploymentType[] @map("employment_types")
+  roleFamilies     String[]       @default([]) @map("role_families")
+  isMandatory      Boolean        @default(false) @map("is_mandatory")
+  defaultOwnerRole OwnerRole      @map("default_owner_role")
+  deadlineAnchor   DeadlineAnchor @map("deadline_anchor")
+  deadlineOffsetDays Int          @map("deadline_offset_days")
+  deadlineBasis    DeadlineBasis  @default(CALENDAR_DAYS) @map("deadline_basis")
+  /// Procurement or processing lead time. Drives the at-risk calculation.
+  leadTimeDays     Int            @default(0) @map("lead_time_days")
+  dependsOnTypes   TaskType[]     @default([]) @map("depends_on_types")
+  authorityClass   AuthorityClass @default(ROUTINE) @map("authority_class")
+  /// Clause that mandates this task, when one exists.
+  sourceClauseId   String?        @map("source_clause_id")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  jurisdiction Jurisdiction? @relation(fields: [jurisdictionCode], references: [code])
+
+  @@unique([taskType, jurisdictionCode])
+  @@index([jurisdictionCode, isMandatory])
+  @@index([service])
+  @@map("task_templates")
+}
+
+// ===========================================================================
+//  DOMAIN 5 — ONBOARDING PLAN SPINE
+// ===========================================================================
+
+model OnboardingPlan {
+  id             String         @id @default(uuid()) @db.Uuid
+  employeeId     String         @map("employee_id") @db.Uuid
+  status         PlanStatus     @default(DRAFT)
+  generationMode GenerationMode @map("generation_mode")
+  /// Set when the system REFUSED to generate, e.g. no approved policy source
+  /// covers this jurisdiction. Refusal is a feature, not an error.
+  refusalReason  String?        @map("refusal_reason")
+  /// Composite confidence computed in code from measured signals (citation
+  /// quote match, retrieval score, template corroboration, validator outcome).
+  /// Never the model's self-reported number.
+  confidence     Decimal?       @db.Decimal(4, 3)
+  confidenceBreakdown Json?     @map("confidence_breakdown")
+  modelName      String?        @map("model_name")
+  promptVersion  String?        @map("prompt_version")
+  createdById    String?        @map("created_by_id") @db.Uuid
+  approvedById   String?        @map("approved_by_id") @db.Uuid
+  approvedAt     DateTime?      @map("approved_at") @db.Timestamptz
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdBy  User?    @relation("PlanCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy User?    @relation("PlanApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  tasks       PlanTask[]
+  findings    ValidationFinding[]
+  llmCalls    LlmCall[]
+  escalations Escalation[]
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("onboarding_plans")
+}
+
+model PlanTask {
+  id              String         @id @default(uuid()) @db.Uuid
+  planId          String         @map("plan_id") @db.Uuid
+  taskType        TaskType       @map("task_type")
+  service         ServiceArea
+  title           String
+  description     String?
+  ownerRole       OwnerRole      @map("owner_role")
+  assigneeUserId  String?        @map("assignee_user_id") @db.Uuid
+  /// ALWAYS computed by the deterministic deadline engine (V6), never taken
+  /// from the model's output.
+  dueDate         DateTime       @map("due_date") @db.Date
+  earliestStartDate DateTime     @map("earliest_start_date") @db.Date
+  authorityClass  AuthorityClass @map("authority_class")
+  origin          TaskOrigin
+  reviewState     ReviewState    @default(OK) @map("review_state")
+  status          TaskStatus     @default(NOT_STARTED)
+  isAtRisk        Boolean        @default(false) @map("is_at_risk")
+  riskReason      String?        @map("risk_reason")
+  onCriticalPath  Boolean        @default(false) @map("on_critical_path")
+  sortOrder       Int            @default(0) @map("sort_order")
+  completedAt     DateTime?      @map("completed_at") @db.Timestamptz
+  completedById   String?        @map("completed_by_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  plan        OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  assignee    User?          @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  completedBy User?          @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+
+  dependencies  PlanTaskDependency[] @relation("DependentTask")
+  dependents    PlanTaskDependency[] @relation("PrerequisiteTask")
+  citations     TaskCitation[]
+  findings      ValidationFinding[]
+  escalations   Escalation[]
+
+  documentRequest    DocumentRequest?
+  equipmentAssignment EquipmentAssignment?
+  payrollSetup       PayrollSetup?
+  benefitEnrollment  BenefitEnrollment?
+  trainingAssignment TrainingAssignment?
+  managerTask        ManagerTask?
+
+  @@unique([planId, taskType])
+  @@index([planId, status])
+  @@index([assigneeUserId])
+  @@index([service, status])
+  @@index([dueDate])
+  @@map("plan_tasks")
+}
+
+/// Edges of the dependency DAG. Validator V5 topologically sorts these and
+/// rejects any cycle before the plan is persisted.
+model PlanTaskDependency {
+  taskId       String @map("task_id") @db.Uuid
+  dependsOnId  String @map("depends_on_id") @db.Uuid
+
+  task      PlanTask @relation("DependentTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn PlanTask @relation("PrerequisiteTask", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnId])
+  @@index([dependsOnId])
+  @@map("plan_task_dependencies")
+}
+
+/// A citation is a FOREIGN KEY, not a string. That is what makes validator V2
+/// (citation integrity) checkable: a fabricated clause id fails the constraint.
+model TaskCitation {
+  id            String   @id @default(uuid()) @db.Uuid
+  taskId        String   @map("task_id") @db.Uuid
+  clauseId      String   @map("clause_id")
+  /// The span the model claims to be relying on. V2 verifies this text really
+  /// occurs in the clause body above a similarity threshold.
+  quotedText    String   @map("quoted_text")
+  quoteMatch    Decimal  @map("quote_match") @db.Decimal(4, 3)
+  retrievalRank Int?     @map("retrieval_rank")
+  retrievalScore Decimal? @map("retrieval_score") @db.Decimal(6, 5)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  task   PlanTask     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  clause PolicyClause @relation(fields: [clauseId], references: [id])
+
+  @@index([taskId])
+  @@index([clauseId])
+  @@map("task_citations")
+}
+
+// ===========================================================================
+//  DOMAIN 6 — WORKFLOW SERVICES
+//  Each service hangs its detail off a PlanTask (1:1). The task is the spine;
+//  these tables hold what that service needs to actually do the work.
+// ===========================================================================
+
+// ---------- 6a. Documents ----------
+
+model Document {
+  id          String   @id @default(uuid()) @db.Uuid
+  employeeId  String   @map("employee_id") @db.Uuid
+  fileName    String   @map("file_name")
+  mimeType    String   @map("mime_type")
+  sizeBytes   Int      @map("size_bytes")
+  storagePath String   @map("storage_path")
+  checksum    String
+  uploadedById String? @map("uploaded_by_id") @db.Uuid
+  uploadedAt  DateTime @default(now()) @map("uploaded_at") @db.Timestamptz
+
+  employee   Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedBy User?             @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  requests   DocumentRequest[]
+
+  @@index([employeeId])
+  @@map("documents")
+}
+
+model DocumentRequest {
+  id             String         @id @default(uuid()) @db.Uuid
+  taskId         String         @unique @map("task_id") @db.Uuid
+  documentType   String         @map("document_type")
+  isRequired     Boolean        @default(true) @map("is_required")
+  status         DocumentStatus @default(REQUESTED)
+  documentId     String?        @map("document_id") @db.Uuid
+  verifiedById   String?        @map("verified_by_id") @db.Uuid
+  verifiedAt     DateTime?      @map("verified_at") @db.Timestamptz
+  rejectionReason String?       @map("rejection_reason")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  task       PlanTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  verifiedBy User?     @relation("DocumentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("document_requests")
+}
+
+// ---------- 6b. Equipment (IT) ----------
+
+model EquipmentCatalog {
+  id           String   @id @default(uuid()) @db.Uuid
+  sku          String   @unique
+  name         String
+  category     String
+  /// Procurement lead time. If startDate - today < leadTimeDays the task is
+  /// flagged at risk by the deterministic risk engine.
+  leadTimeDays Int      @map("lead_time_days")
+  isActive     Boolean  @default(true) @map("is_active")
+
+  assignments EquipmentAssignment[]
+
+  @@map("equipment_catalog")
+}
+
+model EquipmentAssignment {
+  id               String          @id @default(uuid()) @db.Uuid
+  taskId           String          @unique @map("task_id") @db.Uuid
+  catalogId        String          @map("catalog_id") @db.Uuid
+  status           EquipmentStatus @default(REQUESTED)
+  serialNumber     String?         @map("serial_number")
+  orderedAt        DateTime?       @map("ordered_at") @db.Timestamptz
+  expectedDelivery DateTime?       @map("expected_delivery") @db.Date
+  deliveredAt      DateTime?       @map("delivered_at") @db.Timestamptz
+  notes            String?
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  task    PlanTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  catalog EquipmentCatalog @relation(fields: [catalogId], references: [id])
+
+  @@index([status])
+  @@map("equipment_assignments")
+}
+
+// ---------- 6c. Payroll (Finance) ----------
+
+/// NOTE: this is a demonstration system. Real bank numbers are never stored.
+/// We keep the last four digits plus an opaque mock token, which is enough for
+/// the workflow and keeps sensitive data out of the database.
+model PayrollSetup {
+  id                String             @id @default(uuid()) @db.Uuid
+  taskId            String             @unique @map("task_id") @db.Uuid
+  employeeId        String             @map("employee_id") @db.Uuid
+  status            PayrollSetupStatus @default(PENDING)
+  payFrequency      String?            @map("pay_frequency")
+  salaryCurrency    String?            @map("salary_currency") @db.Char(3)
+  taxFormType       String?            @map("tax_form_type") /// 'TD1', 'P45', 'Form-12BB'
+  taxFormReceivedAt DateTime?          @map("tax_form_received_at") @db.Timestamptz
+  bankAccountLast4  String?            @map("bank_account_last4") @db.Char(4)
+  bankTokenRef      String?            @map("bank_token_ref")
+  nationalIdLast4   String?            @map("national_id_last4") @db.Char(4)
+  verifiedById      String?            @map("verified_by_id") @db.Uuid
+  verifiedAt        DateTime?          @map("verified_at") @db.Timestamptz
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  task     PlanTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("payroll_setups")
+}
+
+// ---------- 6d. Benefits (HR) ----------
+
+model BenefitPlan {
+  id                  String      @id @default(uuid()) @db.Uuid
+  code                String      @unique
+  name                String
+  type                BenefitType
+  jurisdictionCode    String?     @map("jurisdiction_code")
+  /// Days after the anchor during which the employee may elect. Missing this
+  /// window has real consequences, so V6 computes it in code.
+  enrollmentWindowDays Int        @map("enrollment_window_days")
+  isAutoEnrol         Boolean     @default(false) @map("is_auto_enrol")
+  description         String?
+  isActive            Boolean     @default(true) @map("is_active")
+
+  jurisdiction Jurisdiction?       @relation(fields: [jurisdictionCode], references: [code])
+  enrollments  BenefitEnrollment[]
+
+  @@index([jurisdictionCode])
+  @@map("benefit_plans")
+}
+
+model BenefitEnrollment {
+  id             String                  @id @default(uuid()) @db.Uuid
+  taskId         String                  @unique @map("task_id") @db.Uuid
+  benefitPlanId  String                  @map("benefit_plan_id") @db.Uuid
+  status         BenefitEnrollmentStatus @default(WINDOW_OPEN)
+  windowOpensOn  DateTime                @map("window_opens_on") @db.Date
+  windowClosesOn DateTime                @map("window_closes_on") @db.Date
+  electedAt      DateTime?               @map("elected_at") @db.Timestamptz
+  waived         Boolean                 @default(false)
+  dependentsCount Int                    @default(0) @map("dependents_count")
+  notes          String?
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz
+
+  task        PlanTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  benefitPlan BenefitPlan @relation(fields: [benefitPlanId], references: [id])
+
+  @@index([status])
+  @@index([windowClosesOn])
+  @@map("benefit_enrollments")
+}
+
+// ---------- 6e. Training (L&D) ----------
+
+model TrainingCourse {
+  id                  String   @id @default(uuid()) @db.Uuid
+  code                String   @unique
+  title               String
+  provider            String?
+  durationMinutes     Int      @map("duration_minutes")
+  /// Jurisdictions in which this course is legally required.
+  mandatoryForJurisdictions String[] @default([]) @map("mandatory_for_jurisdictions")
+  mandatoryForRoles   String[] @default([]) @map("mandatory_for_roles")
+  /// Statutory completion deadline in days from start date, when one exists.
+  statutoryDeadlineDays Int?   @map("statutory_deadline_days")
+  isActive            Boolean  @default(true) @map("is_active")
+
+  assignments TrainingAssignment[]
+
+  @@map("training_courses")
+}
+
+model TrainingAssignment {
+  id          String         @id @default(uuid()) @db.Uuid
+  taskId      String         @unique @map("task_id") @db.Uuid
+  courseId    String         @map("course_id") @db.Uuid
+  status      TrainingStatus @default(ASSIGNED)
+  assignedAt  DateTime       @default(now()) @map("assigned_at") @db.Timestamptz
+  dueDate     DateTime       @map("due_date") @db.Date
+  startedAt   DateTime?      @map("started_at") @db.Timestamptz
+  completedAt DateTime?      @map("completed_at") @db.Timestamptz
+  scorePercent Int?          @map("score_percent")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  task   PlanTask       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  course TrainingCourse @relation(fields: [courseId], references: [id])
+
+  @@index([status])
+  @@index([dueDate])
+  @@map("training_assignments")
+}
+
+// ---------- 6f. Manager tasks (team setup) ----------
+
+model ManagerTask {
+  id              String          @id @default(uuid()) @db.Uuid
+  taskId          String          @unique @map("task_id") @db.Uuid
+  kind            ManagerTaskKind
+  buddyEmployeeId String?         @map("buddy_employee_id") @db.Uuid
+  agenda          Json?
+  notes           String?
+  completedAt     DateTime?       @map("completed_at") @db.Timestamptz
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  task          PlanTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  buddyEmployee Employee? @relation("BuddyEmployee", fields: [buddyEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([kind])
+  @@map("manager_tasks")
+}
+
+// ===========================================================================
+//  DOMAIN 7 — HARNESS & AUDIT EVIDENCE
+//  These four tables are the proof that the harness exists. They are the
+//  substrate for the findings panel, the audit trail and the eval metrics.
+// ===========================================================================
+
+/// Every call to the model is persisted: prompt version and hash, latency,
+/// tokens, whether the output satisfied its schema, and which attempt it was.
+model LlmCall {
+  id            String   @id @default(uuid()) @db.Uuid
+  planId        String?  @map("plan_id") @db.Uuid
+  purpose       String /// 'plan_proposal' | 'clause_embedding' | ...
+  modelName     String   @map("model_name")
+  promptVersion String   @map("prompt_version")
+  promptHash    String   @map("prompt_hash")
+  requestJson   Json     @map("request_json")
+  responseRaw   String?  @map("response_raw")
+  schemaValid   Boolean  @map("schema_valid")
+  attempt       Int      @default(1)
+  latencyMs     Int?     @map("latency_ms")
+  promptTokens  Int?     @map("prompt_tokens")
+  outputTokens  Int?     @map("output_tokens")
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  plan OnboardingPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([createdAt])
+  @@map("llm_calls")
+}
+
+/// One row per validator decision. This is what the "what the harness caught"
+/// panel renders, and what the evaluation metrics are computed from.
+model ValidationFinding {
+  id        String          @id @default(uuid()) @db.Uuid
+  planId    String          @map("plan_id") @db.Uuid
+  taskId    String?         @map("task_id") @db.Uuid
+  validator ValidatorId
+  severity  FindingSeverity
+  /// Machine-readable, e.g. 'CLAUSE_NOT_FOUND', 'QUOTE_MISMATCH',
+  /// 'MANDATORY_TASK_MISSING', 'DEADLINE_DIVERGED', 'CYCLE_DETECTED'.
+  code      String
+  message   String
+  detail    Json            @default("{}")
+  action    FindingAction
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  plan OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  task PlanTask?      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([validator, code])
+  @@map("validation_findings")
+}
+
+/// Append-only. The migration revokes UPDATE and DELETE from the application
+/// role, so the trail cannot be rewritten by the API.
+model AuditEvent {
+  id           BigInt   @id @default(autoincrement())
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  actorRole    String?  @map("actor_role")
+  action       String /// 'plan.approved', 'task.completed', 'role.granted'
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  before       Json?
+  after        Json?
+  reason       String?
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  requestId    String?  @map("request_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([resourceType, resourceId])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+/// Raised when the system refuses to act: no approved policy source for a
+/// jurisdiction, a legal-class task that cannot be grounded, a validator
+/// rejection a human must resolve.
+model Escalation {
+  id           String           @id @default(uuid()) @db.Uuid
+  planId       String?          @map("plan_id") @db.Uuid
+  taskId       String?          @map("task_id") @db.Uuid
+  reasonCode   String           @map("reason_code")
+  detail       String
+  assignedRole OwnerRole        @map("assigned_role")
+  status       EscalationStatus @default(OPEN)
+  raisedById   String?          @map("raised_by_id") @db.Uuid
+  resolvedById String?          @map("resolved_by_id") @db.Uuid
+  resolution   String?
+  resolvedAt   DateTime?        @map("resolved_at") @db.Timestamptz
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  plan       OnboardingPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  task       PlanTask?       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  raisedBy   User?           @relation("EscalationRaiser", fields: [raisedById], references: [id], onDelete: SetNull)
+  resolvedBy User?           @relation("EscalationResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([planId])
+  @@map("escalations")
+}
+
+// ===========================================================================
+//  DOMAIN 8 — NOTIFICATIONS
+// ===========================================================================
+
+model Notification {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  channel   NotificationChannel @default(IN_APP)
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?           @map("read_at") @db.Timestamptz
+  sentAt    DateTime?           @map("sent_at") @db.Timestamptz
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}

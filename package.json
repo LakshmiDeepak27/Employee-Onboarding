@@ -1,0 +1,38 @@
+{
+  "name": "employee-onboarding",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api",
+    "dev": "npm run dev -w @eo/api",
+    "typecheck": "tsc -b --pretty",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"**/*.{ts,json,md}\"",
+    "db:generate": "npm run db:generate -w @eo/api",
+    "db:migrate": "npm run db:migrate -w @eo/api",
+    "db:push": "npm run db:push -w @eo/api",
+    "db:seed": "npm run db:seed -w @eo/api",
+    "db:studio": "npm run db:studio -w @eo/api",
+    "openapi": "npm run openapi -w @eo/api",
+    "openapi:check": "npm run openapi:check -w @eo/api",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
