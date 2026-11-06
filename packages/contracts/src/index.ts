@@ -7,3 +7,5 @@ export * from './services.js';
 export * from './policies.js';
 export * from './llm.js';
 export * from './openapi.js';
+export * from './benefits.js';
+export * from './training.js';

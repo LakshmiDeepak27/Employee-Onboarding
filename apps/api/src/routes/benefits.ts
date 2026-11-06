@@ -52,6 +52,17 @@ export const MOCK_WORKERS: Record<string, WorkerContext> = {
 };
 
 function getWorkerId(req: Request): string {
+  const auth = (req as any).auth;
+  if (auth?.email) {
+    const em = auth.email.toLowerCase();
+    if (em.includes('priya')) return 'worker-priya-ca';
+    if (em.includes('david')) return 'worker-david-gb';
+    if (em.includes('olivia')) return 'worker-olivia-rhye';
+    if (em.includes('alex')) return 'worker-contractor-sg';
+  }
+  if (auth?.employeeId) {
+    return auth.employeeId;
+  }
   const header = req.headers['x-worker-id'];
   if (Array.isArray(header)) return header[0] || 'worker-olivia-rhye';
   if (typeof header === 'string' && header.trim()) return header.trim();

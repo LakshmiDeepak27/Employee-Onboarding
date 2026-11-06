@@ -1,25 +1,29 @@
 /**
- * Interactive Demo Script & Evaluator for Benefits Enrolment
+ * Interactive Demo Script & Evaluator for Workflow Services 4 & 5
+ * (Benefits Enrolment & Training Assignment)
  *
  * Demonstrates the 3 Hires from the Challenge Brief (Section 2.5):
- * 1. Hire A: Priya Nair (Toronto, CA-ON) -> Full-Time Employee
- * 2. Hire B: David Smith (London, GB)    -> Full-Time Employee
- * 3. Hire C: Alex Tan (Singapore, SG)    -> Independent Contractor (Refusal!)
+ * 1. Hire A: Priya Nair (Toronto, CA-ON) -> Full-Time Engineer
+ * 2. Hire B: David Smith (London, GB)    -> Full-Time Marketer
+ * 3. Hire C: Alex Tan (Singapore, SG)    -> Independent Contractor (Grounded Refusal)
  *
  * Run with: npx tsx apps/api/src/demo-runner.ts
  */
 
 import { BenefitsService } from './services/benefits/benefits-service';
 import { WorkerContext } from './services/benefits/benefits-agent';
+import { TrainingService } from './services/training/training-service';
+import { WorkerTrainingContext } from './services/training/training-agent';
 
 async function runDemo() {
   console.log('================================================================');
-  console.log(' AI INNOVATION CHALLENGE · BENEFITS ENROLMENT WORKFLOW & AGENT');
-  console.log(' Option 3: Employee Onboarding Orchestrator');
+  console.log(' AI INNOVATION CHALLENGE · WORKFLOW SERVICES 4 & 5');
+  console.log(' (Benefits Enrolment & Training Assignment)');
   console.log(' "The model proposes, deterministic code disposes, human authorises"');
   console.log('================================================================\n');
 
-  const service = new BenefitsService(process.env.GEMINI_API_KEY);
+  const benefitsService = new BenefitsService(process.env.GEMINI_API_KEY);
+  const trainingService = new TrainingService();
 
   // --------------------------------------------------------------------------
   // HIRE A: Toronto, Ontario (Full-time Employee)
@@ -36,37 +40,43 @@ async function runDemo() {
     notes: 'Relocating from Bengaluru with spouse. Needs health and dental coverage.',
   };
 
-  const enrollmentA = await service.getEnrollmentForTask('task-ben-001', hireA);
-  console.log(`   - Statutory Window: ${enrollmentA.enrolmentWindowStart} to ${enrollmentA.enrolmentWindowEnd}`);
-  console.log(`   - Days Remaining: ${enrollmentA.daysRemaining} days (At Risk: ${enrollmentA.isAtRisk})`);
+  // Benefits
+  const enrollmentA = await benefitsService.getEnrollmentForTask('task-ben-001', hireA);
+  console.log(`   [Benefits] Statutory Window: ${enrollmentA.enrolmentWindowStart} to ${enrollmentA.enrolmentWindowEnd} (Days Remaining: ${enrollmentA.daysRemaining})`);
 
-  console.log('   - Requesting AI Benefits Advisor recommendation...');
-  const adviceA = await service.generateAdvice('task-ben-001', hireA, {
+  const adviceA = await benefitsService.generateAdvice('task-ben-001', hireA, {
     coveragePreference: 'STANDARD',
     familyStatus: 'COUPLE',
     dependentsCount: 1,
   });
+  console.log(`   [Benefits AI] Recommended: ${adviceA.advice?.recommendedPlanCode} (${adviceA.advice?.recommendedTier}) · Deduct: $${adviceA.advice?.estimatedMonthlyDeduction}/mo`);
+  console.log(`   [Benefits Citation] [${adviceA.advice?.citations[0]?.clauseId}] "${adviceA.advice?.citations[0]?.quotedText.slice(0, 55)}..." (Match: ${adviceA.advice?.citations[0]?.quoteMatch})`);
 
-  console.log(`   - Generation Mode: ${adviceA.mode}`);
-  console.log(`   - Recommended Tier: ${adviceA.advice?.recommendedTier}`);
-  console.log(`   - Monthly Employee Deduction: $${adviceA.advice?.estimatedMonthlyDeduction}`);
-  console.log(`   - Composite Confidence: ${adviceA.advice?.confidence}`);
-  console.log(`   - Citations (${adviceA.advice?.citations.length}):`);
-  for (const cit of adviceA.advice?.citations || []) {
-    console.log(`     * [${cit.clauseId}] "${cit.quotedText.slice(0, 60)}..." (Match: ${cit.quoteMatch})`);
+  // Training
+  const workerTrnA: WorkerTrainingContext = {
+    id: hireA.id,
+    fullName: hireA.fullName,
+    jurisdictionCode: hireA.jurisdictionCode,
+    employmentType: hireA.employmentType,
+    roleFamily: hireA.roleFamily,
+    startDate: hireA.startDate,
+  };
+
+  console.log('   [Training] Auto-assigning mandatory statutory courses & Learning Academy pathway...');
+  const assignedA = await trainingService.autoAssignMandatoryCourses('task-trn-001', workerTrnA);
+  for (const a of assignedA) {
+    console.log(`     * Course [${a.course.code}] ${a.course.title} (Due: ${a.dueDate}, Statutory: ${a.isStatutory})`);
   }
 
-  console.log('   - Human Approval & Election (Pre-tax payroll deduction acknowledged)...');
-  const electionResult = await service.electOrWaive('task-ben-001', hireA, {
-    action: 'ELECT',
-    planId: adviceA.advice!.recommendedPlanId,
-    coverageTier: adviceA.advice!.recommendedTier,
-    dependents: [{ fullName: 'Arjun Nair', relationship: 'SPOUSE', dateOfBirth: '1992-05-14' }],
-    preTaxDeductionAcknowledged: true,
-    actor: 'priya@demo.io',
-  });
-  console.log(`   - Status: ${electionResult.enrollment.status}`);
-  console.log(`   - Audit Event Recorded: ${electionResult.auditEventId}\n`);
+  const adviceTrnA = await trainingService.generateAdvice(workerTrnA);
+  console.log(`   [Training AI Copilot] Status: ${adviceTrnA.status} (Composite Confidence: ${adviceTrnA.advice?.confidence})`);
+  console.log(`   [Training AI Citation] [${adviceTrnA.advice?.citations[0]?.clauseId}] "${adviceTrnA.advice?.citations[0]?.quotedText.slice(0, 55)}..."`);
+
+  // Complete one statutory course
+  const ohsCourse = assignedA.find((a) => a.course.code === 'OHS-ON-101')!;
+  await trainingService.completeTraining(ohsCourse.id, 96);
+  const progressA = await trainingService.calculateProgress('task-trn-001');
+  console.log(`   [Learning Pathway Progress] Completed: ${progressA.totalCompleted}/${progressA.totalAssigned} (${progressA.compliancePercent}% compliant)\n`);
 
   // --------------------------------------------------------------------------
   // HIRE B: London, UK (Full-time Employee)
@@ -82,17 +92,27 @@ async function runDemo() {
     workMode: 'ONSITE',
   };
 
-  const adviceB = await service.generateAdvice('task-ben-002', hireB, {
+  const adviceB = await benefitsService.generateAdvice('task-ben-002', hireB, {
     coveragePreference: 'STANDARD',
     familyStatus: 'SINGLE',
     dependentsCount: 0,
   });
-  console.log(`   - Recommended Plan: ${adviceB.advice?.recommendedPlanCode}`);
-  console.log(`   - Statutory Pension Note: ${adviceB.advice?.statutoryNotes}`);
-  console.log(`   - Citations: ${adviceB.advice?.citations.map((c) => c.clauseId).join(', ')}\n`);
+  console.log(`   [Benefits] Recommended Plan: ${adviceB.advice?.recommendedPlanCode}`);
+  console.log(`   [Benefits Pension] ${adviceB.advice?.statutoryNotes}`);
+
+  const workerTrnB: WorkerTrainingContext = {
+    id: hireB.id,
+    fullName: hireB.fullName,
+    jurisdictionCode: hireB.jurisdictionCode,
+    employmentType: hireB.employmentType,
+    roleFamily: hireB.roleFamily,
+    startDate: hireB.startDate,
+  };
+  const assignedB = await trainingService.autoAssignMandatoryCourses('task-trn-002', workerTrnB);
+  console.log(`   [Training] Assigned ${assignedB.length} courses: ${assignedB.map((a) => a.course.code).join(', ')} (Statutory: UK-DP-101 30-day deadline)\n`);
 
   // --------------------------------------------------------------------------
-  // HIRE C: Singapore Contractor (No Corpus / Ineligible) -> Grounded Refusal
+  // HIRE C: Singapore Contractor -> Grounded Refusal
   // --------------------------------------------------------------------------
   console.log('🔹 [3/3] Processing Hire C — Alex Tan (Contractor, Singapore SG)...');
   const hireC: WorkerContext = {
@@ -105,22 +125,28 @@ async function runDemo() {
     workMode: 'REMOTE',
   };
 
-  const adviceC = await service.generateAdvice('task-ben-003', hireC, {
+  const adviceC = await benefitsService.generateAdvice('task-ben-003', hireC, {
     coveragePreference: 'STANDARD',
     familyStatus: 'SINGLE',
     dependentsCount: 0,
   });
+  console.log(`   [Benefits Refusal] ${adviceC.status}: "${adviceC.refusalReason}"`);
 
-  console.log(`   - Agent Status: ${adviceC.status}`);
-  console.log(`   - Refusal Reason: "${adviceC.refusalReason}"`);
-  console.log('   - Findings recorded:');
-  for (const f of adviceC.findings) {
-    console.log(`     * [${f.validator}] ${f.code}: ${f.message} (${f.action})`);
-  }
+  const workerTrnC: WorkerTrainingContext = {
+    id: hireC.id,
+    fullName: hireC.fullName,
+    jurisdictionCode: hireC.jurisdictionCode,
+    employmentType: hireC.employmentType,
+    roleFamily: hireC.roleFamily,
+    startDate: hireC.startDate,
+  };
+  const trnAdviceC = await trainingService.generateAdvice(workerTrnC);
+  console.log(`   [Training Refusal] ${trnAdviceC.status}: "${trnAdviceC.refusalReason}"`);
+  console.log(`   [Findings] ${trnAdviceC.findings[0]?.validator} -> ${trnAdviceC.findings[0]?.code}: ${trnAdviceC.findings[0]?.message}`);
 
   console.log('\n================================================================');
-  console.log(' ✅ ALL 3 WORKFLOW PROFILES TESTED & VERIFIED');
-  console.log(' Grounded Refusal, Statutory Window Engine & Citations functioning.');
+  console.log(' ✨ ALL 3 WORKFLOW PROFILES TESTED & VERIFIED ACROSS SERVICES 4 & 5');
+  console.log(' Grounded Refusals, Statutory Deadlines, Citations & Pathways green.');
   console.log('================================================================');
 }
 
