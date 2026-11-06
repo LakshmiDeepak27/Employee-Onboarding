@@ -152,6 +152,7 @@ cp .env.example .env
 npm run db:generate      # generate the Prisma client
 npm run db:push          # create the tables
 npm run db:seed          # RBAC catalog, reference data, demo users
+npm run db:check         # confirm it all landed
 
 npm run dev              # API on http://localhost:4000
 npm run dev -w @eo/web   # frontend on http://localhost:5173
@@ -176,6 +177,7 @@ All three use the password `Onboard!ng2026`.
 | `npm run dev` | Start the API with hot reload |
 | `npm run db:push` | Push the Prisma schema to the database |
 | `npm run db:seed` | Seed RBAC, reference data and demo users (idempotent) |
+| `npm run db:check` | Smoke-test the connection, schema and seed |
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run openapi` | Regenerate `docs/openapi.json` |
 | `npm run openapi:check` | Fail if the committed spec drifts from the code |
