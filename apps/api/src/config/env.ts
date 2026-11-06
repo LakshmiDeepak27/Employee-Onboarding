@@ -1,4 +1,14 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+// One .env at the repository root is the single source of configuration for
+// the whole workspace. Loaded explicitly by path so it works regardless of
+// which directory the process was started from.
+dotenv.config({
+  path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../.env'),
+});
 
 /**
  * Environment is validated at boot. The process refuses to start on a bad

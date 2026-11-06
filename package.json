@@ -23,7 +23,8 @@
     "openapi": "npm run openapi -w @eo/api",
     "openapi:check": "npm run openapi:check -w @eo/api",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:check": "npm run db:check -w @eo/api"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
