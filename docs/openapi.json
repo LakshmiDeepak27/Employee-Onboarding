@@ -2864,11 +2864,11 @@
           },
           "salaryCurrency": {
             "type": "string",
-            "minLength": 3,
-            "maxLength": 3
+            "pattern": "^[A-Za-z]{3}$"
           },
           "taxFormType": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 40
           },
           "taxFormReceived": {
@@ -2881,7 +2881,7 @@
           },
           "nationalId": {
             "type": "string",
-            "minLength": 4,
+            "minLength": 5,
             "maxLength": 32,
             "description": "Write-only. Never returned. Only last4 is stored."
           }
@@ -6505,6 +6505,26 @@
               }
             }
           },
+          "400": {
+            "description": "Validation failed. `error.fields` lists each offending path.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
             "description": "Authenticated, but the role lacks the permission or the row is out of scope.",
             "content": {
@@ -6517,6 +6537,16 @@
           },
           "404": {
             "description": "Resource not found, or out of the caller's scope (we do not leak existence).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Payroll employee does not match its task plan.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6537,7 +6567,7 @@
           }
         ],
         "summary": "Create or update payroll setup",
-        "description": "Requires `payroll.write`, held by hr_admin only - manager and employee have no payroll grant at all. `bankAccountNumber` and `nationalId` are write-only: the API stores only the last four digits plus an opaque token and discards the rest.",
+        "description": "Requires `payroll.write`, held by hr_admin only. Requires an active, named HR-approved plan and an OK task review. Verified payroll is immutable. Partial updates preserve omitted fields. Changing taxFormType clears receipt unless taxFormReceived is true. Raw bankAccountNumber and nationalId are discarded after deriving suffixes and a random mock bank token. No external payroll or bank calls are made.",
         "parameters": [
           {
             "schema": {
@@ -6580,6 +6610,16 @@
               }
             }
           },
+          "401": {
+            "description": "Missing, expired or invalid access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
             "description": "Authenticated, but the role lacks the permission or the row is out of scope.",
             "content": {
@@ -6592,6 +6632,16 @@
           },
           "404": {
             "description": "Resource not found, or out of the caller's scope (we do not leak existence).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Approval, task state or immutable verified payroll prevents this update.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6614,6 +6664,7 @@
           }
         ],
         "summary": "Verify payroll setup before the first run",
+        "description": "Requires `payroll.verify`, named HR approval, an OK task review, completed same-plan dependencies, tax form receipt, bank metadata, pay frequency and currency. Atomically records the verifier, completes the task and appends an audit event. Repeated verification preserves the original result while the plan remains active. Free-text notes are accepted but not persisted to avoid retaining sensitive identifiers. This is mock workflow verification, not a bank check or payroll run.",
         "parameters": [
           {
             "schema": {
@@ -6656,6 +6707,16 @@
               }
             }
           },
+          "401": {
+            "description": "Missing, expired or invalid access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "403": {
             "description": "Authenticated, but the role lacks the permission or the row is out of scope.",
             "content": {
@@ -6666,8 +6727,18 @@
               }
             }
           },
+          "404": {
+            "description": "Resource not found, or out of the caller's scope (we do not leak existence).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "Tax form or bank details still missing.",
+            "description": "Approval, prerequisites, payroll details or task state prevent verification.",
             "content": {
               "application/json": {
                 "schema": {

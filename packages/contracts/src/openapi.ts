@@ -547,7 +547,7 @@ registry.registerPath({
   summary: 'Payroll setup for a task',
   description: 'Requires `payroll.read`. Bank and national id values are never returned, only last four digits.',
   request: { params: taskParam },
-  responses: { 200: json(PayrollSetupSchema, 'Payroll setup.'), 403: RESP[403], 404: RESP[404] },
+  responses: { 200: json(PayrollSetupSchema, 'Payroll setup.'), 400: RESP[400], 401: RESP[401], 403: RESP[403], 404: RESP[404], 409: err('Payroll employee does not match its task plan.') },
 });
 
 registry.registerPath({
@@ -557,9 +557,9 @@ registry.registerPath({
   security: SECURITY,
   summary: 'Create or update payroll setup',
   description:
-    'Requires `payroll.write`, held by hr_admin only - manager and employee have no payroll grant at all. `bankAccountNumber` and `nationalId` are write-only: the API stores only the last four digits plus an opaque token and discards the rest.',
+    'Requires `payroll.write`, held by hr_admin only. Requires an active, named HR-approved plan and an OK task review. Verified payroll is immutable. Partial updates preserve omitted fields. Changing taxFormType clears receipt unless taxFormReceived is true. Raw bankAccountNumber and nationalId are discarded after deriving suffixes and a random mock bank token. No external payroll or bank calls are made.',
   request: { params: taskParam, body: { content: { 'application/json': { schema: UpsertPayrollSetupRequestSchema } } } },
-  responses: { 200: json(PayrollSetupSchema, 'Saved.'), 400: RESP[400], 403: RESP[403], 404: RESP[404] },
+  responses: { 200: json(PayrollSetupSchema, 'Saved.'), 400: RESP[400], 401: RESP[401], 403: RESP[403], 404: RESP[404], 409: err('Approval, task state or immutable verified payroll prevents this update.') },
 });
 
 registry.registerPath({
@@ -568,8 +568,9 @@ registry.registerPath({
   tags: ['Service: Payroll'],
   security: SECURITY,
   summary: 'Verify payroll setup before the first run',
+  description: 'Requires `payroll.verify`, named HR approval, an OK task review, completed same-plan dependencies, tax form receipt, bank metadata, pay frequency and currency. Atomically records the verifier, completes the task and appends an audit event. Repeated verification preserves the original result while the plan remains active. Free-text notes are accepted but not persisted to avoid retaining sensitive identifiers. This is mock workflow verification, not a bank check or payroll run.',
   request: { params: taskParam, body: { content: { 'application/json': { schema: VerifyPayrollRequestSchema } } } },
-  responses: { 200: json(PayrollSetupSchema, 'Verified.'), 400: RESP[400], 403: RESP[403], 409: err('Tax form or bank details still missing.') },
+  responses: { 200: json(PayrollSetupSchema, 'Verified.'), 400: RESP[400], 401: RESP[401], 403: RESP[403], 404: RESP[404], 409: err('Approval, prerequisites, payroll details or task state prevent verification.') },
 });
 
 registry.registerPath({

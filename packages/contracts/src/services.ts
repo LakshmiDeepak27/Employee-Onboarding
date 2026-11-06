@@ -162,8 +162,8 @@ export const PayrollSetupSchema = z
 export const UpsertPayrollSetupRequestSchema = z
   .object({
     payFrequency: z.enum(['WEEKLY', 'BIWEEKLY', 'SEMIMONTHLY', 'MONTHLY']).optional(),
-    salaryCurrency: z.string().length(3).toUpperCase().optional(),
-    taxFormType: z.string().max(40).optional(),
+    salaryCurrency: z.string().regex(/^[A-Za-z]{3}$/, 'must be a three-letter currency code').toUpperCase().optional(),
+    taxFormType: z.string().trim().min(1).max(40).optional(),
     taxFormReceived: z.boolean().optional(),
     /** Write-only. Only the last four digits are persisted. */
     bankAccountNumber: z
@@ -174,7 +174,8 @@ export const UpsertPayrollSetupRequestSchema = z
     /** Write-only. Only the last four digits are persisted. */
     nationalId: z
       .string()
-      .min(4)
+      .trim()
+      .min(5, 'must contain more than four characters so the stored suffix is not the full identifier')
       .max(32)
       .optional()
       .openapi({ description: 'Write-only. Never returned. Only last4 is stored.' }),

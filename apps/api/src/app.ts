@@ -13,6 +13,7 @@ import { authRouter } from './auth/routes.js';
 import { opsRouter } from './routes/ops.js';
 import { adminRouter } from './routes/admin.js';
 import { referenceRouter } from './routes/reference.js';
+import { payrollRouter } from './routes/payroll.js';
 
 export function createApp() {
   const app = express();
@@ -68,6 +69,7 @@ export function createApp() {
   // --- API v1 --------------------------------------------------------------
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/admin', adminRouter);
+  app.use('/api/v1', payrollRouter);
   app.use('/api/v1', referenceRouter);
 
   app.use(notFoundHandler);
