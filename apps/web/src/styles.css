@@ -2745,61 +2745,64 @@ table td > small {
 .clyora-chat-pill-button {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  gap: 12px;
+  background: #1d64ec;
+  background: linear-gradient(135deg, #1d63ec 0%, #2563eb 100%);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 9999px;
-  padding: 8px 16px 8px 8px;
-  font-size: 14px;
-  font-weight: 600;
+  padding: 7px 14px 7px 8px;
+  font-size: 14.5px;
   cursor: pointer;
-  box-shadow: 0 10px 25px -4px rgba(37, 99, 235, 0.4), 0 4px 10px -2px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 10px 25px -4px rgba(29, 100, 236, 0.45), 0 4px 10px -2px rgba(29, 100, 236, 0.25);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
+  user-select: none;
 }
 
 .clyora-chat-pill-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px -4px rgba(37, 99, 235, 0.5), 0 6px 12px -2px rgba(37, 99, 235, 0.3);
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  box-shadow: 0 14px 28px -4px rgba(29, 100, 236, 0.55), 0 6px 12px -2px rgba(29, 100, 236, 0.35);
+  background: linear-gradient(135deg, #1958d4 0%, #1d4ed8 100%);
+}
+
+.clyora-chat-pill-button:active {
+  transform: translateY(0);
 }
 
 .clyora-pill-icon-circle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(4px);
+  background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
   flex-shrink: 0;
 }
 
-.clyora-c-letter {
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1;
-  font-family: system-ui, -apple-system, sans-serif;
-  letter-spacing: -0.5px;
+.clyora-sparkle-svg {
+  display: block;
 }
 
 .clyora-pill-title {
   color: #ffffff;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.2px;
+  white-space: nowrap;
 }
 
 .clyora-pill-badge {
   background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
   border-radius: 9999px;
   letter-spacing: 0.1px;
+  white-space: nowrap;
 }
 
 /* Chat Popup Dialog */

@@ -10,6 +10,43 @@ interface ChatMessage {
   response?: ChatResponse;
 }
 
+export function ClyoraSparkleIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="clyora-sparkle-svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 2.5C12 7.8 7.8 12 2.5 12C7.8 12 12 16.2 12 21.5C12 16.2 16.2 12 21.5 12C16.2 12 12 7.8 12 2.5Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <path
+        d="M19.5 3.5V7.5M17.5 5.5H21.5"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      <circle
+        cx="5"
+        cy="19"
+        r="1.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
 export function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -85,7 +122,7 @@ export function ChatWidget() {
           aria-label="Ask CLYORA AI Assistant"
         >
           <span className="clyora-pill-icon-circle" aria-hidden="true">
-            <span className="clyora-c-letter">C</span>
+            <ClyoraSparkleIcon size={17} />
           </span>
           <span className="clyora-pill-title">Ask CLYORA</span>
           <span className="clyora-pill-badge">AI Assistant</span>
@@ -94,9 +131,11 @@ export function ChatWidget() {
         <div className="clyora-chat-popup" role="dialog" aria-label="CLYORA AI Assistant">
           <header className="clyora-chat-header">
             <div className="clyora-chat-header-identity">
-              <span className="clyora-chat-avatar">C</span>
+              <span className="clyora-chat-avatar" aria-hidden="true">
+                <ClyoraSparkleIcon size={16} />
+              </span>
               <div>
-                <strong className="clyora-chat-name">CLYORA</strong>
+                <strong className="clyora-chat-name">Ask CLYORA</strong>
                 <span className="clyora-chat-status">
                   <span className="clyora-online-dot" /> AI Onboarding Assistant
                 </span>
