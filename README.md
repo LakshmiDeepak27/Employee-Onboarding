@@ -2,16 +2,24 @@
 
 CLYORA coordinates employee onboarding across HR, managers, IT, finance, and employees. HR creates an employee profile, reviews and approves an onboarding plan, and tracks work through final sign-off. Each team gets a role-scoped workspace for the tasks it owns.
 
-> **Project status:** This repository is an active project. The local development setup is documented below. A public deployment and presentation video have not yet been linked.
+> **Project demonstration:** 📺 **[Watch the full CLYORA platform demonstration video on YouTube](https://youtu.be/sUSnpZo5RgE)**
 
 ## Project links
 
 | Resource | Link |
 | --- | --- |
-| Live deployment | **Coming soon** — add the public HTTPS URL when deployed. |
-| Video presentation | https://www.loom.com/share/57e37b5edbe94a6688d5ce0363482b9b |
+| Video demonstration | [YouTube Video (https://youtu.be/sUSnpZo5RgE)](https://youtu.be/sUSnpZo5RgE) |
+| Loom presentation | [Loom Recording](https://www.loom.com/share/57e37b5edbe94a6688d5ce0363482b9b) |
 | Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
+| Slide presentation | [CLYORA_Employee_Onboarding_5_Slides.pptx](output/presentations/CLYORA_Employee_Onboarding_5_Slides.pptx) |
+| Video script & brief | [CLYORA Video Script PDF](output/pdf/CLYORA_AI_Innovation_Challenge_10_Minute_Video_Script.pdf) |
 | API reference (local) | `http://localhost:4000/docs` after starting the API |
+
+## Video Demonstration
+
+[![Watch CLYORA Demonstration Video](https://img.youtube.com/vi/sUSnpZo5RgE/hqdefault.jpg)](https://youtu.be/sUSnpZo5RgE)
+
+> 📺 **Click the banner above or open [https://youtu.be/sUSnpZo5RgE](https://youtu.be/sUSnpZo5RgE) to watch the comprehensive walk-through covering employee lifecycle, AI plan generation, payroll verification, and grounded assistant features.**
 
 ## Architecture
 
