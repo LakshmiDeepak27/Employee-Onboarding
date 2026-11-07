@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { prisma } from '../db/client.js';
+import { Router } from "express";
+import { prisma } from "../db/client.js";
 import {
   ListUsersQuerySchema,
   CreateUserRequestSchema,
@@ -7,14 +7,14 @@ import {
   AssignRolesRequestSchema,
   z,
   Uuid,
-} from '@eo/contracts';
-import { authenticate, requireAuth } from '../middleware/authenticate.js';
-import { requirePermission } from '../middleware/authorize.js';
-import { validate } from '../middleware/validate.js';
-import { conflict, notFound } from '../lib/errors.js';
-import { hashPassword } from '../auth/service.js';
-import { invalidatePermissionCache } from '../rbac/permissions.js';
-import { writeAudit } from '../lib/audit.js';
+} from "@eo/contracts";
+import { authenticate, requireAuth } from "../middleware/authenticate.js";
+import { requirePermission } from "../middleware/authorize.js";
+import { validate } from "../middleware/validate.js";
+import { conflict, notFound } from "../lib/errors.js";
+import { hashPassword } from "../auth/service.js";
+import { invalidatePermissionCache } from "../rbac/permissions.js";
+import { writeAudit } from "../lib/audit.js";
 
 export const adminRouter = Router();
 adminRouter.use(authenticate);
@@ -50,34 +50,35 @@ function present(u: UserRow) {
     status: u.status,
     mustChangePassword: u.mustChangePassword,
     employeeId: u.employee?.id ?? null,
-    employeeName: u.employee ? `${u.employee.firstName} ${u.employee.lastName}` : null,
+    employeeName: u.employee
+      ? `${u.employee.firstName} ${u.employee.lastName}`
+      : null,
     roles: u.userRoles.map((r) => r.role.key),
     lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     lockedUntil: u.lockedUntil?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),
   };
 }
-
-// ---------------------------------------------------------------------------
 // GET /api/v1/admin/users
-// ---------------------------------------------------------------------------
 adminRouter.get(
-  '/users',
-  requirePermission('user.read'),
+  "/users",
+  requirePermission("user.read"),
   validate({ query: ListUsersQuerySchema }),
   async (req, res, next) => {
     try {
       const q = req.query as unknown as z.infer<typeof ListUsersQuerySchema>;
       const where = {
         ...(q.status ? { status: q.status } : {}),
-        ...(q.search ? { email: { contains: q.search, mode: 'insensitive' as const } } : {}),
+        ...(q.search
+          ? { email: { contains: q.search, mode: "insensitive" as const } }
+          : {}),
         ...(q.role ? { userRoles: { some: { role: { key: q.role } } } } : {}),
       };
       const [items, totalItems] = await Promise.all([
         prisma.user.findMany({
           where,
           select: userSelect,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           skip: (q.page - 1) * q.pageSize,
           take: q.pageSize,
         }),
@@ -97,21 +98,23 @@ adminRouter.get(
     }
   },
 );
-
-// ---------------------------------------------------------------------------
 // POST /api/v1/admin/users
-// ---------------------------------------------------------------------------
 adminRouter.post(
-  '/users',
-  requirePermission('user.create'),
+  "/users",
+  requirePermission("user.create"),
   validate({ body: CreateUserRequestSchema }),
   async (req, res, next) => {
     try {
       const actor = requireAuth(req);
       const input = req.body as z.infer<typeof CreateUserRequestSchema>;
 
-      if (await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } })) {
-        throw conflict('That email is already registered');
+      if (
+        await prisma.user.findUnique({
+          where: { email: input.email },
+          select: { id: true },
+        })
+      ) {
+        throw conflict("That email is already registered");
       }
 
       const roles = await prisma.role.findMany({
@@ -119,28 +122,33 @@ adminRouter.post(
         select: { id: true, key: true },
       });
       if (roles.length !== input.roles.length) {
-        throw notFound('One or more roles');
+        throw notFound("One or more roles");
       }
 
       const created = await prisma.user.create({
         data: {
           email: input.email,
-          status: input.temporaryPassword ? 'ACTIVE' : 'INVITED',
+          status: input.temporaryPassword ? "ACTIVE" : "INVITED",
           mustChangePassword: true,
           ...(input.temporaryPassword
             ? { passwordHash: await hashPassword(input.temporaryPassword) }
             : {}),
-          ...(input.employeeId ? { employee: { connect: { id: input.employeeId } } } : {}),
+          ...(input.employeeId
+            ? { employee: { connect: { id: input.employeeId } } }
+            : {}),
           userRoles: {
-            create: roles.map((r) => ({ roleId: r.id, grantedById: actor.userId })),
+            create: roles.map((r) => ({
+              roleId: r.id,
+              grantedById: actor.userId,
+            })),
           },
         },
         select: userSelect,
       });
 
       await writeAudit(req, {
-        action: 'user.created',
-        resourceType: 'user',
+        action: "user.created",
+        resourceType: "user",
         resourceId: created.id,
         after: { email: created.email, roles: input.roles },
       });
@@ -151,21 +159,21 @@ adminRouter.post(
     }
   },
 );
-
-// ---------------------------------------------------------------------------
 // PATCH /api/v1/admin/users/:id
-// ---------------------------------------------------------------------------
 adminRouter.patch(
-  '/users/:id',
-  requirePermission('user.update'),
+  "/users/:id",
+  requirePermission("user.update"),
   validate({ params: z.object({ id: Uuid }), body: UpdateUserRequestSchema }),
   async (req, res, next) => {
     try {
       const { id } = req.params as { id: string };
       const input = req.body as z.infer<typeof UpdateUserRequestSchema>;
 
-      const before = await prisma.user.findUnique({ where: { id }, select: userSelect });
-      if (!before) throw notFound('User');
+      const before = await prisma.user.findUnique({
+        where: { id },
+        select: userSelect,
+      });
+      if (!before) throw notFound("User");
 
       const updated = await prisma.user.update({
         where: { id },
@@ -187,8 +195,8 @@ adminRouter.patch(
       invalidatePermissionCache(id);
 
       await writeAudit(req, {
-        action: 'user.updated',
-        resourceType: 'user',
+        action: "user.updated",
+        resourceType: "user",
         resourceId: id,
         before: { status: before.status },
         after: { status: updated.status, ...input },
@@ -200,13 +208,10 @@ adminRouter.patch(
     }
   },
 );
-
-// ---------------------------------------------------------------------------
 // PUT /api/v1/admin/users/:id/roles
-// ---------------------------------------------------------------------------
 adminRouter.put(
-  '/users/:id/roles',
-  requirePermission('role.assign'),
+  "/users/:id/roles",
+  requirePermission("role.assign"),
   validate({ params: z.object({ id: Uuid }), body: AssignRolesRequestSchema }),
   async (req, res, next) => {
     try {
@@ -216,27 +221,40 @@ adminRouter.put(
 
       const existing = await prisma.user.findUnique({
         where: { id },
-        select: { id: true, email: true, userRoles: { select: { role: { select: { key: true } } } } },
+        select: {
+          id: true,
+          email: true,
+          userRoles: { select: { role: { select: { key: true } } } },
+        },
       });
-      if (!existing) throw notFound('User');
+      if (!existing) throw notFound("User");
 
       const roles = await prisma.role.findMany({
         where: { key: { in: input.roles } },
         select: { id: true, key: true },
       });
-      if (roles.length !== input.roles.length) throw notFound('One or more roles');
+      if (roles.length !== input.roles.length)
+        throw notFound("One or more roles");
 
       const beforeKeys = existing.userRoles.map((r) => r.role.key);
 
       await prisma.$transaction(async (tx) => {
-        if (input.mode === 'REPLACE') {
+        if (input.mode === "REPLACE") {
           await tx.userRole.deleteMany({ where: { userId: id } });
           await tx.userRole.createMany({
-            data: roles.map((r) => ({ userId: id, roleId: r.id, grantedById: actor.userId })),
+            data: roles.map((r) => ({
+              userId: id,
+              roleId: r.id,
+              grantedById: actor.userId,
+            })),
           });
-        } else if (input.mode === 'ADD') {
+        } else if (input.mode === "ADD") {
           await tx.userRole.createMany({
-            data: roles.map((r) => ({ userId: id, roleId: r.id, grantedById: actor.userId })),
+            data: roles.map((r) => ({
+              userId: id,
+              roleId: r.id,
+              grantedById: actor.userId,
+            })),
             skipDuplicates: true,
           });
         } else {
@@ -249,7 +267,10 @@ adminRouter.put(
       // Role changes must take effect immediately, not at token expiry.
       invalidatePermissionCache(id);
 
-      const after = await prisma.user.findUniqueOrThrow({ where: { id }, select: userSelect });
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id },
+        select: userSelect,
+      });
       const afterKeys = after.userRoles.map((r) => r.role.key);
 
       await prisma.authEvent.createMany({
@@ -259,7 +280,7 @@ adminRouter.put(
             .map((k) => ({
               userId: id,
               email: existing.email,
-              type: 'ROLE_GRANTED' as const,
+              type: "ROLE_GRANTED" as const,
               success: true,
               reason: k,
             })),
@@ -268,7 +289,7 @@ adminRouter.put(
             .map((k) => ({
               userId: id,
               email: existing.email,
-              type: 'ROLE_REVOKED' as const,
+              type: "ROLE_REVOKED" as const,
               success: true,
               reason: k,
             })),
@@ -276,8 +297,8 @@ adminRouter.put(
       });
 
       await writeAudit(req, {
-        action: 'user.roles_changed',
-        resourceType: 'user',
+        action: "user.roles_changed",
+        resourceType: "user",
         resourceId: id,
         before: { roles: beforeKeys },
         after: { roles: afterKeys },
@@ -290,37 +311,41 @@ adminRouter.put(
     }
   },
 );
-
-// ---------------------------------------------------------------------------
 // GET /api/v1/admin/roles
-// ---------------------------------------------------------------------------
-adminRouter.get('/roles', requirePermission('role.read'), async (_req, res, next) => {
-  try {
-    const roles = await prisma.role.findMany({
-      orderBy: { key: 'asc' },
-      select: {
-        id: true,
-        key: true,
-        name: true,
-        description: true,
-        isSystem: true,
-        rolePermissions: {
-          select: { scope: true, permission: { select: { key: true } } },
-          orderBy: { permission: { key: 'asc' } },
+adminRouter.get(
+  "/roles",
+  requirePermission("role.read"),
+  async (_req, res, next) => {
+    try {
+      const roles = await prisma.role.findMany({
+        orderBy: { key: "asc" },
+        select: {
+          id: true,
+          key: true,
+          name: true,
+          description: true,
+          isSystem: true,
+          rolePermissions: {
+            select: { scope: true, permission: { select: { key: true } } },
+            orderBy: { permission: { key: "asc" } },
+          },
         },
-      },
-    });
-    res.json(
-      roles.map((r) => ({
-        id: r.id,
-        key: r.key,
-        name: r.name,
-        description: r.description,
-        isSystem: r.isSystem,
-        permissions: r.rolePermissions.map((rp) => ({ key: rp.permission.key, scope: rp.scope })),
-      })),
-    );
-  } catch (e) {
-    next(e);
-  }
-});
+      });
+      res.json(
+        roles.map((r) => ({
+          id: r.id,
+          key: r.key,
+          name: r.name,
+          description: r.description,
+          isSystem: r.isSystem,
+          permissions: r.rolePermissions.map((rp) => ({
+            key: rp.permission.key,
+            scope: rp.scope,
+          })),
+        })),
+      );
+    } catch (e) {
+      next(e);
+    }
+  },
+);

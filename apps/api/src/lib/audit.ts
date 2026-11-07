@@ -1,5 +1,5 @@
-import type { Request } from 'express';
-import { prisma, type Prisma } from '../db/client.js';
+import type { Request } from "express";
+import { prisma, isDatabaseOnline, setDatabaseOnline, type Prisma } from "../db/client.js";
 
 export interface AuditInput {
   action: string;
@@ -10,34 +10,51 @@ export interface AuditInput {
   reason?: string | null;
 }
 
-/**
- * Writes one row to the append-only audit trail.
- *
- * `audit_events` has UPDATE and DELETE revoked from the application role in
- * migration 0002, so the API physically cannot rewrite history. Pass a
- * transaction client when the audit row must land atomically with the state
- * change it describes — for plan approval, that is mandatory.
- */
+// Pass the transaction client when the audit must commit with the change.
 export async function writeAudit(
   req: Request,
   input: AuditInput,
   tx?: Prisma.TransactionClient,
 ): Promise<void> {
-  const client = tx ?? prisma;
   const actor = req.auth;
-  await client.auditEvent.create({
-    data: {
-      actorUserId: actor?.userId ?? null,
-      actorRole: actor?.roles.join(',') ?? null,
-      action: input.action,
-      resourceType: input.resourceType,
-      resourceId: input.resourceId ?? null,
-      before: (input.before ?? undefined) as Prisma.InputJsonValue | undefined,
-      after: (input.after ?? undefined) as Prisma.InputJsonValue | undefined,
-      reason: input.reason ?? null,
-      ipAddress: req.ip ?? null,
-      userAgent: req.header('user-agent') ?? null,
-      requestId: req.requestId ?? null,
-    },
-  });
+  const auditEntry = {
+    id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    actorUserId: actor?.userId ?? null,
+    actorRole: actor?.roles?.join?.(",") ?? null,
+    action: input.action,
+    resourceType: input.resourceType,
+    resourceId: input.resourceId ?? null,
+    before: input.before ?? null,
+    after: input.after ?? null,
+    reason: input.reason ?? null,
+    ipAddress: req.ip ?? null,
+    userAgent: req.header("user-agent") ?? null,
+    requestId: req.requestId ?? null,
+    createdAt: new Date(),
+  };
+
+  if (isDatabaseOnline()) {
+    try {
+      const client = tx ?? prisma;
+      await client.auditEvent.create({
+        data: {
+          actorUserId: auditEntry.actorUserId,
+          actorRole: auditEntry.actorRole,
+          action: auditEntry.action,
+          resourceType: auditEntry.resourceType,
+          resourceId: auditEntry.resourceId,
+          before: (input.before ?? undefined) as
+            Prisma.InputJsonValue | undefined,
+          after: (input.after ?? undefined) as
+            Prisma.InputJsonValue | undefined,
+          reason: auditEntry.reason,
+          ipAddress: auditEntry.ipAddress,
+          userAgent: auditEntry.userAgent,
+          requestId: auditEntry.requestId,
+        },
+      });
+    } catch {
+      setDatabaseOnline(false);
+    }
+  }
 }

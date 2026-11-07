@@ -1,0 +1,18 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DEV_AUTH_BYPASS: 'false'
+      DOCUMENT_STORAGE_DIR: /app/.data/documents
+    volumes:
+      - documents:/app/.data/documents
+    command: sh -c "node node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/index.js"
+volumes:
+  documents:

@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/lib/api.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/lib/api.ts","./src/workspace/clyoralogo.tsx","./src/workspace/pages.tsx","./src/workspace/public.tsx","./src/workspace/resources.tsx","./src/workspace/shell.tsx","./src/workspace/navigation.ts","./src/workspace/session.tsx","./src/workspace/ui.tsx"],"version":"5.9.3"}

@@ -1,24 +1,3 @@
-/**
- * THE MODEL'S OUTPUT CONTRACT.
- *
- * This is deliberately separate from, and narrower than, the API contract.
- * It is handed to Ollama as a JSON Schema for constrained decoding AND
- * re-parsed with Zod afterwards, because "rare" is not "never".
- *
- * Three structural guardrails are built into the shape itself:
- *
- *   V8  Closed vocabulary — taskType, ownerRole and service are enums. An
- *       injected instruction cannot invent a task type, because anything
- *       outside the enum fails to parse.
- *
- *   V2  Mandatory citation — every proposed task MUST carry a clauseId and
- *       the span it relies on, so a task can always be traced or rejected.
- *
- *   V6  No date field — the model is never given the chance to compute a
- *       deadline. It proposes a *rule*; the deadline engine computes the date
- *       from the jurisdiction business-day calendar.
- */
-
 import {
   z,
   ClauseId,
@@ -27,7 +6,7 @@ import {
   OwnerRoleEnum,
   AuthorityClassEnum,
   DeadlineAnchorEnumValues,
-} from './common.js';
+} from "./common.js";
 
 export const ProposedCitationSchema = z.object({
   clauseId: ClauseId,
@@ -68,10 +47,7 @@ export const PlanProposalSchema = z.object({
 
 export type ProposedTask = z.infer<typeof ProposedTaskSchema>;
 export type PlanProposal = z.infer<typeof PlanProposalSchema>;
-
-// ---------------------------------------------------------------------------
 // Retrieval
-// ---------------------------------------------------------------------------
 
 export const RetrievedClauseSchema = z.object({
   clauseId: ClauseId,
@@ -85,15 +61,12 @@ export const RetrievedClauseSchema = z.object({
 });
 
 export type RetrievedClause = z.infer<typeof RetrievedClauseSchema>;
-
-// ---------------------------------------------------------------------------
 // Prompt input — the structured payload the template is rendered from.
 // `notes` and clause bodies are UNTRUSTED and are rendered inside delimited
 // data blocks that the system prompt declares to be reference material only.
-// ---------------------------------------------------------------------------
 
 export const PromptInputSchema = z.object({
-  promptVersion: z.string().openapi({ example: 'plan-proposal@v3' }),
+  promptVersion: z.string().openapi({ example: "plan-proposal@v3" }),
   profile: z.object({
     jurisdictionCode: z.string(),
     jurisdictionName: z.string(),

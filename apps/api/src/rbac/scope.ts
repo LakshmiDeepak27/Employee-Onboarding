@@ -1,6 +1,6 @@
-import { prisma } from '../db/client.js';
-import type { Scope } from '@eo/contracts';
-import type { AuthContext } from '../middleware/authenticate.js';
+import { prisma } from "../db/client.js";
+import type { Scope } from "@eo/contracts";
+import type { AuthContext } from "../middleware/authenticate.js";
 
 /**
  * SCOPE ENFORCEMENT.
@@ -19,7 +19,7 @@ export async function employeeIdsInScope(
   actor: AuthContext,
   scope: Scope,
 ): Promise<{ all: true } | { all: false; ids: string[] }> {
-  if (scope === 'ORG') return { all: true };
+  if (scope === "ORG") return { all: true };
 
   if (!actor.employeeId) {
     // A user with no employee record (e.g. a bare admin account) has no SELF,
@@ -27,15 +27,19 @@ export async function employeeIdsInScope(
     return { all: false, ids: [] };
   }
 
-  if (scope === 'SELF') return { all: false, ids: [actor.employeeId] };
+  if (scope === "SELF") return { all: false, ids: [actor.employeeId] };
 
-  if (scope === 'REPORTS') {
-    const reports = await prisma.employee.findMany({
+  if (scope === "REPORTS") {
+    let reports: any[] = [];
+    reports = await prisma.employee.findMany({
       where: { managerId: actor.employeeId },
       select: { id: true },
     });
     // A manager can always see their own record too.
-    return { all: false, ids: [actor.employeeId, ...reports.map((r) => r.id)] };
+    return {
+      all: false,
+      ids: [actor.employeeId, ...reports.map((r: any) => r.id)],
+    };
   }
 
   // DEPARTMENT
@@ -71,27 +75,29 @@ export async function isEmployeeInScope(
 export async function employeeScopeFilter(
   actor: AuthContext,
   scope: Scope,
-  column: string = 'employeeId',
+  column: string = "employeeId",
 ): Promise<Record<string, unknown>> {
   const reach = await employeeIdsInScope(actor, scope);
   if (reach.all) return {};
   return { [column]: { in: reach.ids } };
 }
-
-// ---------------------------------------------------------------------------
 // Resolvers: given a resource id, which employee does this row belong to?
 // Used by requirePermission() to scope-check a single row.
-// ---------------------------------------------------------------------------
 
-export async function employeeIdForPlan(planId: string): Promise<string | null> {
+export async function employeeIdForPlan(
+  planId: string,
+): Promise<string | null> {
   const plan = await prisma.onboardingPlan.findUnique({
     where: { id: planId },
     select: { employeeId: true },
   });
+
   return plan?.employeeId ?? null;
 }
 
-export async function employeeIdForTask(taskId: string): Promise<string | null> {
+export async function employeeIdForTask(
+  taskId: string,
+): Promise<string | null> {
   const task = await prisma.planTask.findUnique({
     where: { id: taskId },
     select: { plan: { select: { employeeId: true } } },
@@ -99,7 +105,9 @@ export async function employeeIdForTask(taskId: string): Promise<string | null> 
   return task?.plan.employeeId ?? null;
 }
 
-export async function employeeIdForDocument(documentId: string): Promise<string | null> {
+export async function employeeIdForDocument(
+  documentId: string,
+): Promise<string | null> {
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
     select: { employeeId: true },

@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "prisma generate && tsc -b",
+    "build": "tsc -b",
     "start": "node dist/index.js",
     "openapi": "tsx src/scripts/emit-openapi.ts",
     "openapi:check": "tsx src/scripts/emit-openapi.ts --check",
@@ -14,23 +14,26 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@eo/contracts": "*",
+    "@google/genai": "^3.0.0",
+    "@prisma/client": "^6.1.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
+    "jose": "^6.2.15",
     "jsonwebtoken": "^9.0.2",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
     "prom-client": "^15.1.3",
     "swagger-ui-express": "^5.0.1",
-    "zod": "^3.24.1",
-    "@prisma/client": "^6.1.0"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -40,11 +43,11 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/supertest": "^6.0.2",
     "@types/swagger-ui-express": "^4.1.7",
+    "bcryptjs": "^2.4.3",
+    "prisma": "^6.1.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "prisma": "^6.1.0",
-    "bcryptjs": "^2.4.3"
+    "typescript": "^5.7.2"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts",

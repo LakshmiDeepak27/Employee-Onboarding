@@ -1,15 +1,20 @@
 /**
- * Seeds reference data, the RBAC catalog and three demo accounts.
+ * Seeds only the access-control catalog by default.
  *
  * Idempotent: safe to run repeatedly. The RBAC section is the important part
  * — roles and permissions come from packages/contracts/src/rbac.ts, which is
  * the single source of truth. Change the catalog there, re-run this, done.
  *
- *   npm run db:seed
+ * Optional starter configuration and demo records are disabled by default.
  */
+import dotenv from 'dotenv';
+dotenv.config();
+dotenv.config({ path: '../../.env' });
+
 import bcrypt from 'bcryptjs';
 import { PrismaClient, type EmploymentType } from '@prisma/client';
 import { PERMISSIONS, ROLES } from '../../../packages/contracts/dist/rbac.js';
+import { policyService } from '../src/ai/policyService.js';
 
 const prisma = new PrismaClient();
 
@@ -195,6 +200,9 @@ async function seedCatalogs() {
   for (const c of courses) {
     await prisma.trainingCourse.upsert({ where: { code: c.code }, create: c, update: c });
   }
+
+  console.log('  policy documents and clauses...');
+  await policyService.ensureDemoCorpusSeeded();
 }
 
 /**
@@ -334,10 +342,18 @@ async function seedDemoUsers() {
 async function main() {
   console.log('\nSeeding Employee Onboarding database\n');
   await seedRbac();
-  await seedJurisdictions();
-  await seedDepartments();
-  await seedCatalogs();
-  await seedDemoUsers();
+  if (process.env.SEED_REFERENCE_DATA === 'true') {
+    await seedJurisdictions();
+    await seedDepartments();
+    await seedCatalogs();
+  } else {
+    console.log('  starter reference records skipped');
+  }
+  if (process.env.SEED_DEMO_DATA === 'true') {
+    await seedDemoUsers();
+  } else {
+    console.log('  demo accounts and sample employees skipped');
+  }
 
   const counts = {
     roles: await prisma.role.count(),
@@ -346,22 +362,12 @@ async function main() {
     users: await prisma.user.count(),
     employees: await prisma.employee.count(),
     jurisdictions: await prisma.jurisdiction.count(),
+    policyDocuments: await prisma.policyDocument.count(),
+    policyClauses: await prisma.policyClause.count(),
   };
 
   console.log('\nDone.');
   console.table(counts);
-  console.log(`
-Demo accounts (password for all three: ${DEMO_PASSWORD})
-
-  hr.admin@demo.io   hr_admin  ORG      sees all 5 employees
-  manager@demo.io    manager   REPORTS  sees only Priya (EMP-0003)
-  priya@demo.io      employee  SELF     sees only herself
-
-Try the scope rule:
-  1. sign in as manager@demo.io
-  2. GET /api/v1/employees          -> returns Priya only
-  3. GET /api/v1/employees/<Tom id> -> 404, not 403 (existence is not leaked)
-`);
 }
 
 main()

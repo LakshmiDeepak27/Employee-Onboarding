@@ -2526,6 +2526,35 @@
           "rejectionReason"
         ]
       },
+      "UploadDocumentRequest": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg"
+            ]
+          },
+          "contentBase64": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 7000000,
+            "description": "Base64 file content; maximum decoded size 5 MB."
+          }
+        },
+        "required": [
+          "fileName",
+          "mimeType",
+          "contentBase64"
+        ]
+      },
       "VerifyDocumentRequest": {
         "type": "object",
         "properties": {
@@ -5965,7 +5994,7 @@
         }
       }
     },
-    "/api/v1/tasks/{taskId}/document": {
+    "/api/v1/document-requests/{id}/upload": {
       "post": {
         "tags": [
           "Service: Documents"
@@ -5976,7 +6005,7 @@
           }
         ],
         "summary": "Upload a document against a task",
-        "description": "multipart/form-data. Max 10 MiB; application/pdf, image/jpeg or image/png only. A SHA-256 checksum is stored.",
+        "description": "JSON with base64 file content. Maximum decoded size 5 MB. PDF, JPEG and PNG only. A SHA-256 checksum is stored.",
         "parameters": [
           {
             "schema": {
@@ -5985,34 +6014,21 @@
               "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
             },
             "required": true,
-            "name": "taskId",
+            "name": "id",
             "in": "path"
           }
         ],
         "requestBody": {
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "documentType": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "file",
-                  "documentType"
-                ]
+                "$ref": "#/components/schemas/UploadDocumentRequest"
               }
             }
           }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Uploaded.",
             "content": {
               "application/json": {
@@ -6051,21 +6067,11 @@
                 }
               }
             }
-          },
-          "415": {
-            "description": "Unsupported media type.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/v1/tasks/{taskId}/document/verification": {
+    "/api/v1/document-requests/{id}/verify": {
       "post": {
         "tags": [
           "Service: Documents"
@@ -6085,7 +6091,7 @@
               "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
             },
             "required": true,
-            "name": "taskId",
+            "name": "id",
             "in": "path"
           }
         ],
@@ -6142,7 +6148,7 @@
         }
       }
     },
-    "/api/v1/documents": {
+    "/api/v1/document-requests": {
       "get": {
         "tags": [
           "Service: Documents"

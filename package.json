@@ -10,10 +10,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api",
+    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api && npm run build -w @eo/web",
+    "start": "node apps/api/dist/index.js",
     "dev": "npm run dev -w @eo/api",
+    "dev:api": "npm run dev -w @eo/api",
+    "dev:web": "npm run dev -w @eo/web",
     "typecheck": "tsc -b --pretty",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint apps packages --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
     "db:generate": "npm run db:generate -w @eo/api",
     "db:migrate": "npm run db:migrate -w @eo/api",
@@ -23,7 +26,8 @@
     "openapi": "npm run openapi -w @eo/api",
     "openapi:check": "npm run openapi:check -w @eo/api",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:deploy": "npm run db:deploy -w @eo/api"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

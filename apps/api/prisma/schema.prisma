@@ -309,6 +309,8 @@ model User {
   id                 String     @id @default(uuid()) @db.Uuid
   email              String     @unique @db.Citext
   passwordHash       String?    @map("password_hash")
+  authProvider       String     @default("local") @map("auth_provider")
+  oidcSubject        String?    @unique @map("oidc_subject")
   status             UserStatus @default(INVITED)
   mustChangePassword Boolean    @default(true) @map("must_change_password")
 
@@ -318,6 +320,8 @@ model User {
   failedLoginCount Int       @default(0) @map("failed_login_count")
   lockedUntil      DateTime? @map("locked_until") @db.Timestamptz
   lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz
+  inviteTokenHash  String?   @unique @map("invite_token_hash")
+  inviteExpiresAt  DateTime? @map("invite_expires_at") @db.Timestamptz
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -1090,4 +1094,45 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+// ===========================================================================
+//  DOMAIN 9 — ASYNCHRONOUS BACKGROUND JOBS
+// ===========================================================================
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum JobStage {
+  PROFILE_INTAKE
+  JURISDICTION_RESOLUTION
+  CLAUSE_RETRIEVAL
+  PLAN_PROPOSAL
+  VALIDATION
+  GRAPH_AND_RISK
+  PERSISTED
+}
+
+model BackgroundJob {
+  id              String     @id @default(uuid()) @db.Uuid
+  employeeId      String?    @map("employee_id") @db.Uuid
+  planId          String?    @map("plan_id") @db.Uuid
+  status          JobStatus  @default(QUEUED)
+  stage           JobStage?
+  progressPercent Int        @default(0) @map("progress_percent")
+  resultUrl       String?    @map("result_url")
+  error           String?
+  options         Json?
+  startedAt       DateTime?  @map("started_at") @db.Timestamptz
+  finishedAt      DateTime?  @map("finished_at") @db.Timestamptz
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("background_jobs")
 }
