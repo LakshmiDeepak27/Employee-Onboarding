@@ -130,9 +130,17 @@
             "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
           },
           "email": {
-            "type": "string",
-            "format": "email",
-            "example": "hr.admin@demo.io"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
           },
           "status": {
             "type": "string",
@@ -172,6 +180,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -270,6 +279,7 @@
                   "ACCOUNT_LOCKED",
                   "PASSWORD_CHANGE_REQUIRED",
                   "APPROVAL_BLOCKED",
+                  "MISSING_TEMPLATES",
                   "UNSUPPORTED_JURISDICTION",
                   "RATE_LIMITED",
                   "UPSTREAM_UNAVAILABLE",
@@ -313,9 +323,17 @@
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "format": "email",
-            "example": "hr.admin@demo.io"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
           },
           "password": {
             "type": "string",
@@ -326,6 +344,52 @@
         "required": [
           "email",
           "password"
+        ]
+      },
+      "ManagerOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "jobTitle": {
+            "type": "string"
+          },
+          "departmentName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "jobTitle",
+          "departmentName",
+          "email"
         ]
       },
       "RefreshResponse": {
@@ -510,6 +574,29 @@
             ],
             "format": "uuid",
             "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "latestPlanId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "latestPlanStatus": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "DRAFT",
+              "AWAITING_APPROVAL",
+              "APPROVED",
+              "IN_PROGRESS",
+              "AWAITING_COMPLETION_APPROVAL",
+              "COMPLETED",
+              "REFUSED"
+            ]
           }
         },
         "required": [
@@ -523,7 +610,9 @@
           "employmentType",
           "startDate",
           "status",
-          "activePlanId"
+          "activePlanId",
+          "latestPlanId",
+          "latestPlanStatus"
         ]
       },
       "PageMeta": {
@@ -584,12 +673,20 @@
                 "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
               },
               "workEmail": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "email",
-                "example": "hr.admin@demo.io"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "email",
+                    "example": "hr.admin@demo.io"
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "personalEmail": {
                 "type": "string",
@@ -704,9 +801,17 @@
             "example": "hr.admin@demo.io"
           },
           "workEmail": {
-            "type": "string",
-            "format": "email",
-            "example": "hr.admin@demo.io"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
           },
           "phone": {
             "type": "string",
@@ -807,9 +912,17 @@
             "example": "hr.admin@demo.io"
           },
           "workEmail": {
-            "type": "string",
-            "format": "email",
-            "example": "hr.admin@demo.io"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
           },
           "phone": {
             "type": "string",
@@ -902,11 +1015,14 @@
             "format": "email",
             "example": "hr.admin@demo.io"
           },
-          "inviteToken": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "username": {
+            "type": "string"
+          },
+          "activationEmailSent": {
+            "type": "boolean"
+          },
+          "inviteUrl": {
+            "type": "string"
           },
           "expiresAt": {
             "type": "string",
@@ -917,7 +1033,8 @@
         "required": [
           "userId",
           "email",
-          "inviteToken",
+          "username",
+          "activationEmailSent",
           "expiresAt"
         ]
       },
@@ -1153,6 +1270,7 @@
               "AWAITING_APPROVAL",
               "APPROVED",
               "IN_PROGRESS",
+              "AWAITING_COMPLETION_APPROVAL",
               "COMPLETED",
               "REFUSED"
             ]
@@ -2118,6 +2236,7 @@
               "AWAITING_APPROVAL",
               "APPROVED",
               "IN_PROGRESS",
+              "AWAITING_COMPLETION_APPROVAL",
               "COMPLETED",
               "REFUSED"
             ]
@@ -2188,6 +2307,60 @@
         },
         "required": [
           "decision",
+          "acknowledgement"
+        ]
+      },
+      "FinalizeOnboardingResponse": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "AWAITING_APPROVAL",
+              "APPROVED",
+              "IN_PROGRESS",
+              "AWAITING_COMPLETION_APPROVAL",
+              "COMPLETED",
+              "REFUSED"
+            ]
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-11-06T09:30:00.000Z"
+          },
+          "completedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId",
+          "status",
+          "completedAt",
+          "completedBy"
+        ]
+      },
+      "FinalizeOnboardingRequest": {
+        "type": "object",
+        "properties": {
+          "acknowledgement": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
           "acknowledgement"
         ]
       },
@@ -2526,6 +2699,35 @@
           "rejectionReason"
         ]
       },
+      "UploadDocumentRequest": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg"
+            ]
+          },
+          "contentBase64": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 7000000,
+            "description": "Base64 file content; maximum decoded size 5 MB."
+          }
+        },
+        "required": [
+          "fileName",
+          "mimeType",
+          "contentBase64"
+        ]
+      },
       "VerifyDocumentRequest": {
         "type": "object",
         "properties": {
@@ -2622,6 +2824,7 @@
               "ORDERED",
               "SHIPPED",
               "DELIVERED",
+              "RECEIVED",
               "RETURNED"
             ]
           },
@@ -2656,6 +2859,14 @@
             "format": "date-time",
             "example": "2026-11-06T09:30:00.000Z"
           },
+          "receivedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "example": "2026-11-06T09:30:00.000Z"
+          },
           "notes": {
             "type": [
               "string",
@@ -2672,6 +2883,7 @@
           "orderedAt",
           "expectedDelivery",
           "deliveredAt",
+          "receivedAt",
           "notes"
         ]
       },
@@ -2702,6 +2914,7 @@
               "ORDERED",
               "SHIPPED",
               "DELIVERED",
+              "RECEIVED",
               "RETURNED"
             ]
           },
@@ -2864,11 +3077,11 @@
           },
           "salaryCurrency": {
             "type": "string",
-            "minLength": 3,
-            "maxLength": 3
+            "pattern": "^[A-Za-z]{3}$"
           },
           "taxFormType": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 40
           },
           "taxFormReceived": {
@@ -2881,7 +3094,7 @@
           },
           "nationalId": {
             "type": "string",
-            "minLength": 4,
+            "minLength": 5,
             "maxLength": 32,
             "description": "Write-only. Never returned. Only last4 is stored."
           }
@@ -2904,185 +3117,6 @@
         },
         "required": [
           "acknowledgement"
-        ]
-      },
-      "BenefitPlan": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
-          },
-          "code": {
-            "type": "string",
-            "example": "CA-MED-STD"
-          },
-          "name": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "MEDICAL",
-              "DENTAL",
-              "VISION",
-              "PENSION",
-              "LIFE_INSURANCE",
-              "WELLNESS"
-            ]
-          },
-          "jurisdictionCode": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$",
-            "example": "CA-ON"
-          },
-          "enrollmentWindowDays": {
-            "type": "integer"
-          },
-          "isAutoEnrol": {
-            "type": "boolean",
-            "description": "True for statutory auto-enrolment schemes such as UK pension."
-          },
-          "description": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "code",
-          "name",
-          "type",
-          "jurisdictionCode",
-          "enrollmentWindowDays",
-          "isAutoEnrol",
-          "description"
-        ]
-      },
-      "BenefitEnrollment": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
-          },
-          "taskId": {
-            "type": "string",
-            "format": "uuid",
-            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
-          },
-          "benefitPlan": {
-            "$ref": "#/components/schemas/BenefitPlan"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "WINDOW_OPEN",
-              "ELECTED",
-              "WAIVED",
-              "WINDOW_CLOSED",
-              "AUTO_ENROLLED"
-            ]
-          },
-          "windowOpensOn": {
-            "type": "string",
-            "format": "date",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "example": "2026-12-01"
-          },
-          "windowClosesOn": {
-            "type": "string",
-            "format": "date",
-            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-            "description": "Computed by the deadline engine. Missing this window has real consequences.",
-            "example": "2026-12-01"
-          },
-          "daysRemaining": {
-            "type": "integer"
-          },
-          "electedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time",
-            "example": "2026-11-06T09:30:00.000Z"
-          },
-          "waived": {
-            "type": "boolean"
-          },
-          "dependentsCount": {
-            "type": "integer"
-          },
-          "notes": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "taskId",
-          "benefitPlan",
-          "status",
-          "windowOpensOn",
-          "windowClosesOn",
-          "daysRemaining",
-          "electedAt",
-          "waived",
-          "dependentsCount",
-          "notes"
-        ]
-      },
-      "ElectBenefitRequest": {
-        "type": "object",
-        "properties": {
-          "decision": {
-            "type": "string",
-            "enum": [
-              "ELECT",
-              "WAIVE"
-            ]
-          },
-          "dependentsCount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 20,
-            "default": 0
-          },
-          "notes": {
-            "type": "string",
-            "maxLength": 500
-          }
-        },
-        "required": [
-          "decision"
-        ]
-      },
-      "BenefitEnrollmentListResponse": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BenefitEnrollment"
-            }
-          },
-          "meta": {
-            "$ref": "#/components/schemas/PageMeta"
-          }
-        },
-        "required": [
-          "items",
-          "meta"
         ]
       },
       "TrainingCourse": {
@@ -3345,6 +3379,46 @@
             ],
             "format": "date-time",
             "example": "2026-11-06T09:30:00.000Z"
+          },
+          "employeeId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "employeeName": {
+            "type": "string"
+          },
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "planStatus": {
+            "type": "string"
+          },
+          "taskTitle": {
+            "type": "string"
+          },
+          "taskDescription": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "taskStatus": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-12-01"
+          },
+          "blockedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -3441,7 +3515,7 @@
           },
           "isMock": {
             "type": "boolean",
-            "description": "TRUE for every document in this challenge. These are author-written demonstration policies, not legal guidance."
+            "description": "True only for demonstration content; production policy sources are explicitly entered and approved by the organization."
           },
           "clauseCount": {
             "type": "integer"
@@ -3772,9 +3846,17 @@
             "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
           },
           "email": {
-            "type": "string",
-            "format": "email",
-            "example": "hr.admin@demo.io"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
           },
           "status": {
             "type": "string",
@@ -3808,6 +3890,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -3870,9 +3953,17 @@
         "type": "object",
         "properties": {
           "email": {
-            "type": "string",
-            "format": "email",
-            "example": "hr.admin@demo.io"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
           },
           "roles": {
             "type": "array",
@@ -3880,6 +3971,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -3931,6 +4023,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -3967,6 +4060,7 @@
             "type": "string",
             "enum": [
               "hr_admin",
+              "it_admin",
               "manager",
               "employee"
             ]
@@ -4138,6 +4232,65 @@
           },
           "429": {
             "description": "Too many attempts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/managers": {
+      "get": {
+        "tags": [
+          "Employees"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List assignable manager identities",
+        "description": "HR-only list of manager-role users that are linked to employee profiles, so new hires receive a valid direct-report relationship.",
+        "responses": {
+          "200": {
+            "description": "Managers available for assignment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ManagerOption"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but the role lacks the permission or the row is out of scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Manager options are unavailable while the employee database is offline.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4771,8 +4924,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Invited.",
+          "202": {
+            "description": "Activation email queued by Keycloak.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5068,6 +5221,7 @@
                 "AWAITING_APPROVAL",
                 "APPROVED",
                 "IN_PROGRESS",
+                "AWAITING_COMPLETION_APPROVAL",
                 "COMPLETED",
                 "REFUSED"
               ]
@@ -5573,6 +5727,82 @@
         }
       }
     },
+    "/api/v1/plans/{id}/completion-approval": {
+      "post": {
+        "tags": [
+          "Plans"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Record final HR sign-off for a completed onboarding",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalizeOnboardingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Onboarding finalized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinalizeOnboardingResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but the role lacks the permission or the row is out of scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found, or out of the caller's scope (we do not leak existence).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The onboarding is not ready for final approval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tasks": {
       "get": {
         "tags": [
@@ -5665,6 +5895,16 @@
             },
             "required": false,
             "name": "assigneeUserId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+            },
+            "required": false,
+            "name": "planId",
             "in": "query"
           },
           {
@@ -5965,7 +6205,7 @@
         }
       }
     },
-    "/api/v1/tasks/{taskId}/document": {
+    "/api/v1/document-requests/{id}/upload": {
       "post": {
         "tags": [
           "Service: Documents"
@@ -5976,7 +6216,7 @@
           }
         ],
         "summary": "Upload a document against a task",
-        "description": "multipart/form-data. Max 10 MiB; application/pdf, image/jpeg or image/png only. A SHA-256 checksum is stored.",
+        "description": "JSON with base64 file content. Maximum decoded size 5 MB. PDF, JPEG and PNG only. A SHA-256 checksum is stored.",
         "parameters": [
           {
             "schema": {
@@ -5985,34 +6225,21 @@
               "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
             },
             "required": true,
-            "name": "taskId",
+            "name": "id",
             "in": "path"
           }
         ],
         "requestBody": {
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "documentType": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "file",
-                  "documentType"
-                ]
+                "$ref": "#/components/schemas/UploadDocumentRequest"
               }
             }
           }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Uploaded.",
             "content": {
               "application/json": {
@@ -6051,21 +6278,11 @@
                 }
               }
             }
-          },
-          "415": {
-            "description": "Unsupported media type.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       }
     },
-    "/api/v1/tasks/{taskId}/document/verification": {
+    "/api/v1/document-requests/{id}/verify": {
       "post": {
         "tags": [
           "Service: Documents"
@@ -6085,7 +6302,7 @@
               "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
             },
             "required": true,
-            "name": "taskId",
+            "name": "id",
             "in": "path"
           }
         ],
@@ -6142,7 +6359,7 @@
         }
       }
     },
-    "/api/v1/documents": {
+    "/api/v1/document-requests": {
       "get": {
         "tags": [
           "Service: Documents"
@@ -6708,7 +6925,101 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/BenefitPlan"
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "code": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "HEALTH",
+                          "DENTAL",
+                          "VISION",
+                          "RETIREMENT",
+                          "LIFE_DISABILITY",
+                          "FLEX_WELLNESS"
+                        ]
+                      },
+                      "jurisdictionCode": {
+                        "type": "string"
+                      },
+                      "tierCosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "tier": {
+                              "type": "string",
+                              "enum": [
+                                "EMPLOYEE_ONLY",
+                                "EMPLOYEE_PLUS_SPOUSE",
+                                "EMPLOYEE_PLUS_FAMILY"
+                              ]
+                            },
+                            "monthlyEmployeeCost": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "monthlyEmployerCost": {
+                              "type": "number",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "tier",
+                            "monthlyEmployeeCost",
+                            "monthlyEmployerCost"
+                          ]
+                        }
+                      },
+                      "payrollDeductionPreTax": {
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "keyHighlights": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "default": []
+                      },
+                      "policyClauseId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "isDefaultRecommended": {
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "isActive": {
+                        "type": "boolean",
+                        "default": true
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "code",
+                      "name",
+                      "category",
+                      "jurisdictionCode",
+                      "tierCosts",
+                      "description"
+                    ]
                   }
                 }
               }
@@ -6756,7 +7067,407 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BenefitEnrollment"
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "taskId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "employeeId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "employeeName": {
+                      "type": "string"
+                    },
+                    "jurisdictionCode": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_STARTED",
+                        "IN_PROGRESS",
+                        "ELECTED",
+                        "WAIVED",
+                        "EXPIRED"
+                      ]
+                    },
+                    "enrolmentWindowStart": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "enrolmentWindowEnd": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "daysRemaining": {
+                      "type": "integer"
+                    },
+                    "isAtRisk": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "riskReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "electedPlanId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    },
+                    "electedPlan": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "code": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": [
+                            "HEALTH",
+                            "DENTAL",
+                            "VISION",
+                            "RETIREMENT",
+                            "LIFE_DISABILITY",
+                            "FLEX_WELLNESS"
+                          ]
+                        },
+                        "jurisdictionCode": {
+                          "type": "string"
+                        },
+                        "tierCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "tier": {
+                                "type": "string",
+                                "enum": [
+                                  "EMPLOYEE_ONLY",
+                                  "EMPLOYEE_PLUS_SPOUSE",
+                                  "EMPLOYEE_PLUS_FAMILY"
+                                ]
+                              },
+                              "monthlyEmployeeCost": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "monthlyEmployerCost": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "tier",
+                              "monthlyEmployeeCost",
+                              "monthlyEmployerCost"
+                            ]
+                          }
+                        },
+                        "payrollDeductionPreTax": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "keyHighlights": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        },
+                        "policyClauseId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "isDefaultRecommended": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "isActive": {
+                          "type": "boolean",
+                          "default": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "code",
+                        "name",
+                        "category",
+                        "jurisdictionCode",
+                        "tierCosts",
+                        "description"
+                      ]
+                    },
+                    "coverageTier": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "EMPLOYEE_ONLY",
+                        "EMPLOYEE_PLUS_SPOUSE",
+                        "EMPLOYEE_PLUS_FAMILY"
+                      ]
+                    },
+                    "dependents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "fullName": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "relationship": {
+                            "type": "string",
+                            "enum": [
+                              "SPOUSE",
+                              "DOMESTIC_PARTNER",
+                              "CHILD",
+                              "LEGAL_DEPENDENT"
+                            ]
+                          },
+                          "dateOfBirth": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "sinOrTaxIdLast4": {
+                            "type": "string",
+                            "minLength": 4,
+                            "maxLength": 4
+                          }
+                        },
+                        "required": [
+                          "fullName",
+                          "relationship",
+                          "dateOfBirth"
+                        ]
+                      },
+                      "default": []
+                    },
+                    "monthlyEmployeeCost": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "monthlyEmployerCost": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waived": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "waiveReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "decisionDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "payrollDeductionConfirmed": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "citations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "clauseId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "documentTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "isMock": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "quotedText": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "quoteMatch": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "retrievalRank": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "clauseId",
+                          "documentTitle",
+                          "quotedText",
+                          "quoteMatch"
+                        ]
+                      },
+                      "default": []
+                    },
+                    "aiGuidance": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "recommendedPlanId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "recommendedPlanCode": {
+                          "type": "string"
+                        },
+                        "recommendedTier": {
+                          "type": "string",
+                          "enum": [
+                            "EMPLOYEE_ONLY",
+                            "EMPLOYEE_PLUS_SPOUSE",
+                            "EMPLOYEE_PLUS_FAMILY"
+                          ]
+                        },
+                        "estimatedMonthlyDeduction": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "estimatedAnnualTaxSavings": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "rationale": {
+                          "type": "string"
+                        },
+                        "statutoryNotes": {
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "confidenceBreakdown": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/ConfidenceBreakdown"
+                            },
+                            {
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "clauseId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "documentTitle": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "isMock": {
+                                "type": "boolean",
+                                "default": true
+                              },
+                              "quotedText": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "quoteMatch": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "retrievalRank": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "clauseId",
+                              "documentTitle",
+                              "quotedText",
+                              "quoteMatch"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "recommendedPlanId",
+                        "recommendedPlanCode",
+                        "recommendedTier",
+                        "estimatedMonthlyDeduction",
+                        "estimatedAnnualTaxSavings",
+                        "rationale",
+                        "statutoryNotes",
+                        "confidence",
+                        "confidenceBreakdown",
+                        "citations"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "taskId",
+                    "employeeId",
+                    "jurisdictionCode",
+                    "status",
+                    "enrolmentWindowStart",
+                    "enrolmentWindowEnd",
+                    "daysRemaining"
+                  ]
                 }
               }
             }
@@ -6809,7 +7520,96 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ElectBenefitRequest"
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "ELECT",
+                      "WAIVE"
+                    ]
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "ELECT",
+                      "WAIVE"
+                    ]
+                  },
+                  "planId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "coverageTier": {
+                    "type": "string",
+                    "enum": [
+                      "EMPLOYEE_ONLY",
+                      "EMPLOYEE_PLUS_SPOUSE",
+                      "EMPLOYEE_PLUS_FAMILY"
+                    ]
+                  },
+                  "dependents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "fullName": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "relationship": {
+                          "type": "string",
+                          "enum": [
+                            "SPOUSE",
+                            "DOMESTIC_PARTNER",
+                            "CHILD",
+                            "LEGAL_DEPENDENT"
+                          ]
+                        },
+                        "dateOfBirth": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        "sinOrTaxIdLast4": {
+                          "type": "string",
+                          "minLength": 4,
+                          "maxLength": 4
+                        }
+                      },
+                      "required": [
+                        "fullName",
+                        "relationship",
+                        "dateOfBirth"
+                      ]
+                    }
+                  },
+                  "dependentsCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 20,
+                    "default": 0
+                  },
+                  "waiveReason": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "preTaxDeductionAcknowledged": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "actor": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
               }
             }
           }
@@ -6820,7 +7620,407 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BenefitEnrollment"
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "taskId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "employeeId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "employeeName": {
+                      "type": "string"
+                    },
+                    "jurisdictionCode": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_STARTED",
+                        "IN_PROGRESS",
+                        "ELECTED",
+                        "WAIVED",
+                        "EXPIRED"
+                      ]
+                    },
+                    "enrolmentWindowStart": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "enrolmentWindowEnd": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "daysRemaining": {
+                      "type": "integer"
+                    },
+                    "isAtRisk": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "riskReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "electedPlanId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    },
+                    "electedPlan": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "code": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": [
+                            "HEALTH",
+                            "DENTAL",
+                            "VISION",
+                            "RETIREMENT",
+                            "LIFE_DISABILITY",
+                            "FLEX_WELLNESS"
+                          ]
+                        },
+                        "jurisdictionCode": {
+                          "type": "string"
+                        },
+                        "tierCosts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "tier": {
+                                "type": "string",
+                                "enum": [
+                                  "EMPLOYEE_ONLY",
+                                  "EMPLOYEE_PLUS_SPOUSE",
+                                  "EMPLOYEE_PLUS_FAMILY"
+                                ]
+                              },
+                              "monthlyEmployeeCost": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "monthlyEmployerCost": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "tier",
+                              "monthlyEmployeeCost",
+                              "monthlyEmployerCost"
+                            ]
+                          }
+                        },
+                        "payrollDeductionPreTax": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "keyHighlights": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        },
+                        "policyClauseId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "isDefaultRecommended": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "isActive": {
+                          "type": "boolean",
+                          "default": true
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "code",
+                        "name",
+                        "category",
+                        "jurisdictionCode",
+                        "tierCosts",
+                        "description"
+                      ]
+                    },
+                    "coverageTier": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "EMPLOYEE_ONLY",
+                        "EMPLOYEE_PLUS_SPOUSE",
+                        "EMPLOYEE_PLUS_FAMILY"
+                      ]
+                    },
+                    "dependents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "fullName": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "relationship": {
+                            "type": "string",
+                            "enum": [
+                              "SPOUSE",
+                              "DOMESTIC_PARTNER",
+                              "CHILD",
+                              "LEGAL_DEPENDENT"
+                            ]
+                          },
+                          "dateOfBirth": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "sinOrTaxIdLast4": {
+                            "type": "string",
+                            "minLength": 4,
+                            "maxLength": 4
+                          }
+                        },
+                        "required": [
+                          "fullName",
+                          "relationship",
+                          "dateOfBirth"
+                        ]
+                      },
+                      "default": []
+                    },
+                    "monthlyEmployeeCost": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "monthlyEmployerCost": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "waived": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "waiveReason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "decisionDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "payrollDeductionConfirmed": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "citations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "clauseId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "documentTitle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "isMock": {
+                            "type": "boolean",
+                            "default": true
+                          },
+                          "quotedText": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "quoteMatch": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "retrievalRank": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "clauseId",
+                          "documentTitle",
+                          "quotedText",
+                          "quoteMatch"
+                        ]
+                      },
+                      "default": []
+                    },
+                    "aiGuidance": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "recommendedPlanId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "recommendedPlanCode": {
+                          "type": "string"
+                        },
+                        "recommendedTier": {
+                          "type": "string",
+                          "enum": [
+                            "EMPLOYEE_ONLY",
+                            "EMPLOYEE_PLUS_SPOUSE",
+                            "EMPLOYEE_PLUS_FAMILY"
+                          ]
+                        },
+                        "estimatedMonthlyDeduction": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "estimatedAnnualTaxSavings": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "rationale": {
+                          "type": "string"
+                        },
+                        "statutoryNotes": {
+                          "type": "string"
+                        },
+                        "confidence": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "confidenceBreakdown": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/ConfidenceBreakdown"
+                            },
+                            {
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "citations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "clauseId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "documentTitle": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "isMock": {
+                                "type": "boolean",
+                                "default": true
+                              },
+                              "quotedText": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "quoteMatch": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "retrievalRank": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": [
+                              "clauseId",
+                              "documentTitle",
+                              "quotedText",
+                              "quoteMatch"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "recommendedPlanId",
+                        "recommendedPlanCode",
+                        "recommendedTier",
+                        "estimatedMonthlyDeduction",
+                        "estimatedAnnualTaxSavings",
+                        "rationale",
+                        "statutoryNotes",
+                        "confidence",
+                        "confidenceBreakdown",
+                        "citations"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "taskId",
+                    "employeeId",
+                    "jurisdictionCode",
+                    "status",
+                    "enrolmentWindowStart",
+                    "enrolmentWindowEnd",
+                    "daysRemaining"
+                  ]
                 }
               }
             }
@@ -6910,7 +8110,422 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BenefitEnrollmentListResponse"
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "taskId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "employeeId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "employeeName": {
+                            "type": "string"
+                          },
+                          "jurisdictionCode": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "NOT_STARTED",
+                              "IN_PROGRESS",
+                              "ELECTED",
+                              "WAIVED",
+                              "EXPIRED"
+                            ]
+                          },
+                          "enrolmentWindowStart": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "enrolmentWindowEnd": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                          },
+                          "daysRemaining": {
+                            "type": "integer"
+                          },
+                          "isAtRisk": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "riskReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "electedPlanId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "uuid"
+                          },
+                          "electedPlan": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "code": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "category": {
+                                "type": "string",
+                                "enum": [
+                                  "HEALTH",
+                                  "DENTAL",
+                                  "VISION",
+                                  "RETIREMENT",
+                                  "LIFE_DISABILITY",
+                                  "FLEX_WELLNESS"
+                                ]
+                              },
+                              "jurisdictionCode": {
+                                "type": "string"
+                              },
+                              "tierCosts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "tier": {
+                                      "type": "string",
+                                      "enum": [
+                                        "EMPLOYEE_ONLY",
+                                        "EMPLOYEE_PLUS_SPOUSE",
+                                        "EMPLOYEE_PLUS_FAMILY"
+                                      ]
+                                    },
+                                    "monthlyEmployeeCost": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "monthlyEmployerCost": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "tier",
+                                    "monthlyEmployeeCost",
+                                    "monthlyEmployerCost"
+                                  ]
+                                }
+                              },
+                              "payrollDeductionPreTax": {
+                                "type": "boolean",
+                                "default": true
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "keyHighlights": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "default": []
+                              },
+                              "policyClauseId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "isDefaultRecommended": {
+                                "type": "boolean",
+                                "default": false
+                              },
+                              "isActive": {
+                                "type": "boolean",
+                                "default": true
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "code",
+                              "name",
+                              "category",
+                              "jurisdictionCode",
+                              "tierCosts",
+                              "description"
+                            ]
+                          },
+                          "coverageTier": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "EMPLOYEE_ONLY",
+                              "EMPLOYEE_PLUS_SPOUSE",
+                              "EMPLOYEE_PLUS_FAMILY"
+                            ]
+                          },
+                          "dependents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid"
+                                },
+                                "fullName": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "relationship": {
+                                  "type": "string",
+                                  "enum": [
+                                    "SPOUSE",
+                                    "DOMESTIC_PARTNER",
+                                    "CHILD",
+                                    "LEGAL_DEPENDENT"
+                                  ]
+                                },
+                                "dateOfBirth": {
+                                  "type": "string",
+                                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                                },
+                                "sinOrTaxIdLast4": {
+                                  "type": "string",
+                                  "minLength": 4,
+                                  "maxLength": 4
+                                }
+                              },
+                              "required": [
+                                "fullName",
+                                "relationship",
+                                "dateOfBirth"
+                              ]
+                            },
+                            "default": []
+                          },
+                          "monthlyEmployeeCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "monthlyEmployerCost": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "waived": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "waiveReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "decisionDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "payrollDeductionConfirmed": {
+                            "type": "boolean",
+                            "default": false
+                          },
+                          "citations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "clauseId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "documentTitle": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "isMock": {
+                                  "type": "boolean",
+                                  "default": true
+                                },
+                                "quotedText": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "quoteMatch": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "maximum": 1
+                                },
+                                "retrievalRank": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": [
+                                "clauseId",
+                                "documentTitle",
+                                "quotedText",
+                                "quoteMatch"
+                              ]
+                            },
+                            "default": []
+                          },
+                          "aiGuidance": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "recommendedPlanId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "recommendedPlanCode": {
+                                "type": "string"
+                              },
+                              "recommendedTier": {
+                                "type": "string",
+                                "enum": [
+                                  "EMPLOYEE_ONLY",
+                                  "EMPLOYEE_PLUS_SPOUSE",
+                                  "EMPLOYEE_PLUS_FAMILY"
+                                ]
+                              },
+                              "estimatedMonthlyDeduction": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "estimatedAnnualTaxSavings": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "rationale": {
+                                "type": "string"
+                              },
+                              "statutoryNotes": {
+                                "type": "string"
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "confidenceBreakdown": {
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/ConfidenceBreakdown"
+                                  },
+                                  {
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "citations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "clauseId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "documentTitle": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "isMock": {
+                                      "type": "boolean",
+                                      "default": true
+                                    },
+                                    "quotedText": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "quoteMatch": {
+                                      "type": "number",
+                                      "minimum": 0,
+                                      "maximum": 1
+                                    },
+                                    "retrievalRank": {
+                                      "type": "integer",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "clauseId",
+                                    "documentTitle",
+                                    "quotedText",
+                                    "quoteMatch"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "recommendedPlanId",
+                              "recommendedPlanCode",
+                              "recommendedTier",
+                              "estimatedMonthlyDeduction",
+                              "estimatedAnnualTaxSavings",
+                              "rationale",
+                              "statutoryNotes",
+                              "confidence",
+                              "confidenceBreakdown",
+                              "citations"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "taskId",
+                          "employeeId",
+                          "jurisdictionCode",
+                          "status",
+                          "enrolmentWindowStart",
+                          "enrolmentWindowEnd",
+                          "daysRemaining"
+                        ]
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "meta"
+                  ]
                 }
               }
             }
@@ -7807,6 +9422,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]

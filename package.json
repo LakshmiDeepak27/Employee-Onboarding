@@ -7,24 +7,36 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api",
+    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api && npm run build -w @eo/web",
+    "start": "node apps/api/dist/index.js",
     "dev": "npm run dev -w @eo/api",
+    "dev:api": "npm run dev -w @eo/api",
+    "dev:web": "npm run dev -w @eo/web",
     "typecheck": "tsc -b --pretty",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint apps packages --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
     "db:generate": "npm run db:generate -w @eo/api",
     "db:migrate": "npm run db:migrate -w @eo/api",
     "db:push": "npm run db:push -w @eo/api",
     "db:seed": "npm run db:seed -w @eo/api",
+    "db:seed:presentation": "npm run db:seed:presentation -w @eo/api",
+    "keycloak:clean:presentation": "npm run keycloak:clean:presentation -w @eo/api",
+    "db:seed:reference": "npm run db:seed:reference -w @eo/api",
     "db:studio": "npm run db:studio -w @eo/api",
     "openapi": "npm run openapi -w @eo/api",
     "openapi:check": "npm run openapi:check -w @eo/api",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:check": "npm run db:check -w @eo/api"
+    "verify": "npm run typecheck && npm run lint && npm run openapi:check && npm test && npm run build",
+    "db:deploy": "npm run db:deploy -w @eo/api",
+    "db:seed:templates": "npm run db:seed:templates -w @eo/api",
+    "setup": "npm ci && npm run db:generate && npm run db:deploy && npm run db:seed:reference && npm run db:seed:templates && npm run build",
+    "auth:up": "docker update --restart unless-stopped eo-keycloak && docker start eo-keycloak || docker compose --profile local-identity up -d keycloak",
+    "auth:stop": "docker stop eo-keycloak || docker compose --profile local-identity stop keycloak",
+    "auth:logs": "docker logs -f eo-keycloak"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

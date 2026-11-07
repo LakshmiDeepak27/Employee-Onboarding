@@ -1,0 +1,2 @@
+ALTER TYPE "EquipmentStatus" ADD VALUE IF NOT EXISTS 'RECEIVED';
+ALTER TABLE "equipment_assignments" ADD COLUMN IF NOT EXISTS "received_at" TIMESTAMPTZ;

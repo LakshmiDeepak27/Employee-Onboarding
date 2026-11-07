@@ -1,8 +1,8 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import type { Scope } from '@eo/contracts';
-import { forbidden, notFound, unauthenticated } from '../lib/errors.js';
-import { isEmployeeInScope } from '../rbac/scope.js';
-import type { AuthContext } from './authenticate.js';
+import type { NextFunction, Request, RequestHandler, Response } from "express";
+import type { Scope } from "@eo/contracts";
+import { forbidden, notFound, unauthenticated } from "../lib/errors.js";
+import { isEmployeeInScope } from "../rbac/scope.js";
+import type { AuthContext } from "./authenticate.js";
 
 /**
  * Resolves the employee a request is *about*, so the scope check has a target.
@@ -42,7 +42,11 @@ export function requirePermission(
   permissionKey: string,
   options: AuthorizeOptions = {},
 ): RequestHandler {
-  return async function authorize(req: Request, _res: Response, next: NextFunction) {
+  return async function authorize(
+    req: Request,
+    _res: Response,
+    next: NextFunction,
+  ) {
     try {
       const actor = req.auth;
       if (!actor) throw unauthenticated();
@@ -55,8 +59,13 @@ export function requirePermission(
       }
 
       if (options.minimumScope) {
-        const rank: Record<Scope, number> = { SELF: 0, REPORTS: 1, DEPARTMENT: 2, ORG: 3 };
-        if (rank[scope] < rank[options.minimumScope]) {
+        const rank: Record<Scope, number> = {
+          SELF: 0,
+          REPORTS: 1,
+          DEPARTMENT: 2,
+          ORG: 3,
+        };
+        if ((rank[scope] ?? 0) < (rank[options.minimumScope] ?? 0)) {
           throw forbidden(
             `This action requires "${permissionKey}" at ${options.minimumScope} scope; you hold it at ${scope}.`,
           );
@@ -73,7 +82,8 @@ export function requirePermission(
           throw notFound();
         }
         // Hand the resolved target downstream so handlers need not re-query.
-        (req as Request & { targetEmployeeId?: string }).targetEmployeeId = targetEmployeeId;
+        (req as Request & { targetEmployeeId?: string }).targetEmployeeId =
+          targetEmployeeId;
       }
 
       next();
@@ -100,7 +110,7 @@ export function requireAnyRole(...roleKeys: string[]): RequestHandler {
     const actor = req.auth;
     if (!actor) return next(unauthenticated());
     if (!actor.roles.some((r) => roleKeys.includes(r))) {
-      return next(forbidden(`Requires one of: ${roleKeys.join(', ')}`));
+      return next(forbidden(`Requires one of: ${roleKeys.join(", ")}`));
     }
     next();
   };

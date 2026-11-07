@@ -1,19 +1,32 @@
 /**
- * Seeds reference data, the RBAC catalog and three demo accounts.
+ * Seeds only the access-control catalog by default.
  *
  * Idempotent: safe to run repeatedly. The RBAC section is the important part
  * — roles and permissions come from packages/contracts/src/rbac.ts, which is
  * the single source of truth. Change the catalog there, re-run this, done.
  *
- *   npm run db:seed
+ * Optional starter configuration and demo records are disabled by default.
  */
-import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
+dotenv.config();
+dotenv.config({ path: '../../.env' });
+
 import { PrismaClient, type EmploymentType } from '@prisma/client';
 import { PERMISSIONS, ROLES } from '../../../packages/contracts/dist/rbac.js';
+import { policyService } from '../src/ai/policyService.js';
 
 const prisma = new PrismaClient();
 
-const DEMO_PASSWORD = 'Onboard!ng2026';
+function assertLocalPresentationReset() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl || process.env.NODE_ENV === 'production') {
+    throw new Error('Presentation cleanup is local-development only. Refusing to modify this database.');
+  }
+  const host = new URL(databaseUrl).hostname;
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) {
+    throw new Error(`Presentation cleanup requires a localhost database; refusing host ${host}.`);
+  }
+}
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -92,8 +105,8 @@ async function seedJurisdictions() {
       timezone: 'Asia/Kolkata',
     },
     {
-      // Deliberately left WITHOUT a policy corpus so the refusal path can be
-      // demonstrated: generating a plan here must refuse and escalate.
+      // Deliberately left without a policy corpus so the safe internal-only
+      // onboarding fallback can be demonstrated.
       code: 'SG',
       displayName: 'Singapore',
       countryCode: 'SG',
@@ -158,6 +171,15 @@ async function seedCatalogs() {
       enrollmentWindowDays: 30,
       isAutoEnrol: false,
     },
+    {
+      code: 'SG-STARTER-OPTIONS',
+      name: 'Singapore Benefits Options',
+      type: 'WELLNESS' as const,
+      jurisdictionCode: 'SG',
+      enrollmentWindowDays: 30,
+      isAutoEnrol: false,
+      description: 'Starter options for presentation only. HR must confirm current company benefits and eligibility before use.',
+    },
   ];
   for (const b of benefits) {
     await prisma.benefitPlan.upsert({ where: { code: b.code }, create: b, update: b });
@@ -195,26 +217,50 @@ async function seedCatalogs() {
   for (const c of courses) {
     await prisma.trainingCourse.upsert({ where: { code: c.code }, create: c, update: c });
   }
+
+  console.log('  policy documents and clauses...');
+  await policyService.ensureDemoCorpusSeeded();
 }
 
-/**
- * Three demo accounts, one per role, so the whole team can sign in and the
- * scope rules are visible immediately:
- *   hr.admin@demo.io  sees everything
- *   manager@demo.io   sees only priya (their direct report)
- *   priya@demo.io     sees only herself
+/** Remove local presentation data, while retaining only the two staff users.
+ * Their Keycloak identities are not deleted here; the separate, localhost-only
+ * Keycloak cleaner handles those after a dry run.
  */
-async function seedDemoUsers() {
-  console.log('  demo users and employees...');
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+async function resetPresentationWorkspace() {
+  console.log('  clearing old local workflow data...');
+  await prisma.$transaction([
+    prisma.backgroundJob.deleteMany(),
+    prisma.escalation.deleteMany(),
+    prisma.llmCall.deleteMany(),
+    prisma.validationFinding.deleteMany(),
+    prisma.auditEvent.deleteMany(),
+    prisma.authEvent.deleteMany(),
+    prisma.notification.deleteMany(),
+    prisma.refreshToken.deleteMany(),
+    prisma.employee.deleteMany(),
+    prisma.policyClause.deleteMany(),
+    prisma.policyDocument.deleteMany(),
+    prisma.user.deleteMany({
+      where: { email: { notIn: ['asha.hr@clyora', 'david.manager@clyora'] } },
+    }),
+  ]);
+}
+
+/** Seed the HR and manager staff identities used in the walkthrough.
+ * The new employee is created from the HR screen so the end-to-end flow starts
+ * with a genuinely fresh PRE_HIRE record and invitation.
+ */
+async function seedPresentationUsers() {
+  console.log('  HR and manager identity profiles...');
 
   async function makeUser(email: string, roleKey: string) {
     const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
     const user = await prisma.user.upsert({
       where: { email },
-      create: { email, passwordHash, status: 'ACTIVE', mustChangePassword: false },
-      update: { passwordHash, status: 'ACTIVE', mustChangePassword: false },
+      create: { email, passwordHash: null, authProvider: 'oidc', status: 'ACTIVE', mustChangePassword: false },
+      update: { passwordHash: null, authProvider: 'oidc', status: 'ACTIVE', mustChangePassword: false, tokenVersion: { increment: 1 } },
     });
+    await prisma.userRole.deleteMany({ where: { userId: user.id } });
     await prisma.userRole.upsert({
       where: { userId_roleId: { userId: user.id, roleId: role.id } },
       create: { userId: user.id, roleId: role.id },
@@ -223,23 +269,27 @@ async function seedDemoUsers() {
     return user;
   }
 
-  const hrUser = await makeUser('hr.admin@demo.io', 'hr_admin');
-  const mgrUser = await makeUser('manager@demo.io', 'manager');
-  const empUser = await makeUser('priya@demo.io', 'employee');
+  const hrUser = await makeUser('asha.hr@clyora', 'hr_admin');
+  const mgrUser = await makeUser('david.manager@clyora', 'manager');
 
   const eng = await prisma.department.findUniqueOrThrow({ where: { code: 'ENG' } });
+  const peopleOps = await prisma.department.findUniqueOrThrow({ where: { code: 'HR' } });
 
   async function makeEmployee(input: {
     employeeNumber: string;
     firstName: string;
     lastName: string;
     personalEmail: string;
+    workEmail?: string;
     userId?: string;
     managerId?: string;
     jurisdictionCode: string;
     employmentType: EmploymentType;
     startInDays: number;
     jobTitle: string;
+    roleFamily: string;
+    workMode: 'REMOTE' | 'ONSITE' | 'HYBRID';
+    departmentId?: string;
   }) {
     return prisma.employee.upsert({
       where: { employeeNumber: input.employeeNumber },
@@ -248,96 +298,137 @@ async function seedDemoUsers() {
         firstName: input.firstName,
         lastName: input.lastName,
         personalEmail: input.personalEmail,
+        workEmail: input.workEmail ?? null,
+        departmentId: input.departmentId ?? eng.id,
         jobTitle: input.jobTitle,
-        roleFamily: 'engineering',
-        departmentId: eng.id,
+        roleFamily: input.roleFamily,
         jurisdictionCode: input.jurisdictionCode,
         employmentType: input.employmentType,
-        workMode: 'HYBRID',
+        workMode: input.workMode,
         startDate: daysFromNow(input.startInDays),
-        status: 'ONBOARDING',
+        status: 'ACTIVE',
+        managerId: input.managerId ?? null,
         ...(input.userId ? { userId: input.userId } : {}),
-        ...(input.managerId ? { managerId: input.managerId } : {}),
       },
       update: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        personalEmail: input.personalEmail,
+        workEmail: input.workEmail ?? null,
+        departmentId: input.departmentId ?? eng.id,
+        jobTitle: input.jobTitle,
+        roleFamily: input.roleFamily,
+        workMode: input.workMode,
+        jurisdictionCode: input.jurisdictionCode,
+        employmentType: input.employmentType,
+        status: 'ACTIVE',
+        managerId: input.managerId ?? null,
         ...(input.userId ? { userId: input.userId } : {}),
-        ...(input.managerId ? { managerId: input.managerId } : {}),
         startDate: daysFromNow(input.startInDays),
       },
     });
   }
 
-  const hrEmp = await makeEmployee({
+  // HR staff are employees too. Linking Asha's profile keeps the people
+  // directory complete and allows HR to be selected as a reporting manager.
+  await makeEmployee({
     employeeNumber: 'EMP-0001',
     firstName: 'Asha',
     lastName: 'Rao',
-    personalEmail: 'asha@demo.io',
+    personalEmail: 'asha.hr@example.invalid',
+    workEmail: 'asha.hr@clyora',
     userId: hrUser.id,
     jurisdictionCode: 'IN-KA',
     employmentType: 'FULL_TIME',
-    startInDays: -400,
-    jobTitle: 'HR Lead',
+    startInDays: -300,
+    jobTitle: 'HR Administrator',
+    roleFamily: 'people-operations',
+    workMode: 'HYBRID',
+    departmentId: peopleOps.id,
   });
 
-  const mgrEmp = await makeEmployee({
+  // David needs an employee profile because manager permissions are scoped to
+  // direct reports.
+  await makeEmployee({
     employeeNumber: 'EMP-0002',
     firstName: 'David',
     lastName: 'Chen',
-    personalEmail: 'david@demo.io',
+    personalEmail: 'david@clyora.com',
+    workEmail: 'david.manager@clyora',
     userId: mgrUser.id,
     jurisdictionCode: 'CA-ON',
     employmentType: 'FULL_TIME',
     startInDays: -300,
     jobTitle: 'Engineering Manager',
+    roleFamily: 'engineering',
+    workMode: 'HYBRID',
   });
 
-  // Priya reports to David. This pair is what proves REPORTS scope works.
-  await makeEmployee({
-    employeeNumber: 'EMP-0003',
-    firstName: 'Priya',
-    lastName: 'Nair',
-    personalEmail: 'priya@demo.io',
-    userId: empUser.id,
-    managerId: mgrEmp.id,
-    jurisdictionCode: 'CA-ON',
-    employmentType: 'FULL_TIME',
-    startInDays: 10,
-    jobTitle: 'Software Engineer',
-  });
+  if (process.env.SEED_PRESENTATION_USERS === 'true') {
+    const [userCount, employeeCount] = await Promise.all([
+      prisma.user.count(),
+      prisma.employee.count(),
+    ]);
+    if (userCount !== 2 || employeeCount !== 2) {
+      throw new Error(`Presentation setup expected 2 staff accounts and their 2 linked employee profiles; found ${userCount} accounts and ${employeeCount} employee profiles.`);
+    }
+  }
 
-  // Not David's report. Manager scope must NOT reach this one.
-  await makeEmployee({
-    employeeNumber: 'EMP-0004',
-    firstName: 'Tom',
-    lastName: 'Webb',
-    personalEmail: 'tom@demo.io',
-    managerId: hrEmp.id,
-    jurisdictionCode: 'GB',
-    employmentType: 'FULL_TIME',
-    startInDays: 14,
-    jobTitle: 'Software Engineer',
-  });
+}
 
-  // Singapore contractor: no policy corpus, so plan generation must REFUSE.
-  await makeEmployee({
-    employeeNumber: 'EMP-0005',
-    firstName: 'Wei',
-    lastName: 'Lim',
-    personalEmail: 'wei@demo.io',
-    jurisdictionCode: 'SG',
-    employmentType: 'CONTRACTOR',
-    startInDays: 21,
-    jobTitle: 'Contract Designer',
+/** Explicit one-time/bootstrap identity; role assignment is database-side. */
+async function seedBootstrapHr() {
+  const email = process.env.BOOTSTRAP_HR_EMAIL?.trim().toLowerCase();
+  if (!email) return;
+  if (!/^[a-z0-9][a-z0-9._-]*\.hr@clyora$/.test(email)) {
+    throw new Error('BOOTSTRAP_HR_EMAIL must use <username>.hr@clyora');
+  }
+  const hrRole = await prisma.role.findUniqueOrThrow({ where: { key: 'hr_admin' } });
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    include: { userRoles: { include: { role: true } } },
   });
+  if (existing) {
+    if (!existing.userRoles.some((entry) => entry.role.key === 'hr_admin')) {
+      throw new Error(`Account ${email} already exists without hr_admin; refusing to elevate it during bootstrap`);
+    }
+    console.log(`  bootstrap HR account already provisioned: ${email}`);
+    return;
+  }
+  await prisma.user.create({
+    data: {
+      email,
+      status: 'INVITED',
+      mustChangePassword: false,
+      authProvider: 'oidc',
+      userRoles: { create: [{ roleId: hrRole.id }] },
+    },
+  });
+  console.log(`  provisioned initial HR OIDC account: ${email}`);
 }
 
 async function main() {
   console.log('\nSeeding Employee Onboarding database\n');
+  if (process.env.SEED_PRESENTATION_USERS === 'true') {
+    assertLocalPresentationReset();
+    await resetPresentationWorkspace();
+  }
   await seedRbac();
-  await seedJurisdictions();
-  await seedDepartments();
-  await seedCatalogs();
-  await seedDemoUsers();
+  // Presentation mode is deliberately fixed to Asha (HR) and David (manager).
+  // Do not allow BOOTSTRAP_HR_EMAIL to add another application user.
+  if (process.env.SEED_PRESENTATION_USERS !== 'true') await seedBootstrapHr();
+  if (process.env.SEED_REFERENCE_DATA === 'true' || process.argv.includes('--reference')) {
+    await seedJurisdictions();
+    await seedDepartments();
+    await seedCatalogs();
+  } else {
+    console.log('  starter reference records skipped');
+  }
+  if (process.env.SEED_DEMO_DATA === 'true' || process.env.SEED_PRESENTATION_USERS === 'true') {
+    await seedPresentationUsers();
+  } else {
+    console.log('  presentation identities skipped');
+  }
 
   const counts = {
     roles: await prisma.role.count(),
@@ -346,22 +437,12 @@ async function main() {
     users: await prisma.user.count(),
     employees: await prisma.employee.count(),
     jurisdictions: await prisma.jurisdiction.count(),
+    policyDocuments: await prisma.policyDocument.count(),
+    policyClauses: await prisma.policyClause.count(),
   };
 
   console.log('\nDone.');
   console.table(counts);
-  console.log(`
-Demo accounts (password for all three: ${DEMO_PASSWORD})
-
-  hr.admin@demo.io   hr_admin  ORG      sees all 5 employees
-  manager@demo.io    manager   REPORTS  sees only Priya (EMP-0003)
-  priya@demo.io      employee  SELF     sees only herself
-
-Try the scope rule:
-  1. sign in as manager@demo.io
-  2. GET /api/v1/employees          -> returns Priya only
-  3. GET /api/v1/employees/<Tom id> -> 404, not 403 (existence is not leaked)
-`);
 }
 
 main()
