@@ -13,6 +13,8 @@ import { authRouter } from './auth/routes.js';
 import { opsRouter } from './routes/ops.js';
 import { adminRouter } from './routes/admin.js';
 import { referenceRouter } from './routes/reference.js';
+import { trainingRouter } from './routes/training.js';
+import { managingRouter } from './routes/managing.js';
 
 export function createApp() {
   const app = express();
@@ -66,9 +68,11 @@ export function createApp() {
   );
 
   // --- API v1 --------------------------------------------------------------
-  app.use('/api/v1/auth', authRouter);
-  app.use('/api/v1/admin', adminRouter);
-  app.use('/api/v1', referenceRouter);
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/admin', adminRouter);
+app.use('/api/v1', referenceRouter);
+app.use('/api/v1', trainingRouter);
+app.use('/api/v1', managingRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

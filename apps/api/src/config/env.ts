@@ -45,10 +45,13 @@ const EnvSchema = z
       .string()
       .default('false')
       .transform((v) => v === 'true'),
+OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
+LLM_MODEL: z.string().default('qwen2.5:7b-instruct'),
 
-    OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
-    LLM_MODEL: z.string().default('qwen2.5:7b-instruct'),
-    EMBEDDING_MODEL: z.string().default('nomic-embed-text'),
+GOOGLE_API_KEY: z.string().optional(),
+GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+
+EMBEDDING_MODEL: z.string().default('nomic-embed-text'),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.DEV_AUTH_BYPASS && cfg.NODE_ENV !== 'development') {
