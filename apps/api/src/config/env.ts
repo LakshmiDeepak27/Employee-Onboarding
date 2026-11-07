@@ -119,7 +119,7 @@ const EnvSchema = z
         message: "Keycloak user provisioning requires both admin service-account client ID and secret",
       });
     }
-    if (cfg.NODE_ENV === "production" && !cfg.OIDC_ISSUER_URL) {
+    if (cfg.NODE_ENV === "production" && !cfg.OIDC_ISSUER_URL && process.env.REQUIRE_OIDC === "true") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["OIDC_ISSUER_URL"],
