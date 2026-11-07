@@ -238,7 +238,7 @@ describe('Onboarding lifecycle logic', () => {
     expect(progress.isComplete).toBe(true);
 
     planStatus = derivePlanStatus(planStatus, progress);
-    expect(planStatus).toBe('COMPLETED');
+    expect(planStatus).toBe('AWAITING_COMPLETION_APPROVAL');
   });
 });
 

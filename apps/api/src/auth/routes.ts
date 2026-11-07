@@ -11,10 +11,12 @@ import { validate } from "../middleware/validate.js";
 import { authenticate, requireAuth } from "../middleware/authenticate.js";
 import { requirePermission } from "../middleware/authorize.js";
 import { unauthenticated } from "../lib/errors.js";
+import { authRateLimit } from "../middleware/rateLimit.js";
 import { env, isProd } from "../config/env.js";
 import * as auth from "./service.js";
 
 export const authRouter = Router();
+authRouter.use(authRateLimit);
 
 const REFRESH_COOKIE = "eo_refresh";
 const OIDC_STATE_COOKIE = "eo_oidc_state";

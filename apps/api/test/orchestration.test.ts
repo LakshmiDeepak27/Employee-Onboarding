@@ -167,7 +167,7 @@ describe('3. Progress Tracker & Status Transitions', () => {
     expect(progress.dayOneReady).toBe(true);
   });
 
-  it('transitions overall plan status correctly from APPROVED to IN_PROGRESS to COMPLETED', () => {
+  it('transitions overall plan status correctly from APPROVED to IN_PROGRESS to AWAITING_COMPLETION_APPROVAL', () => {
     const initialProgress = {
       totalTasks: 4,
       completedTasks: 0,
@@ -186,7 +186,7 @@ describe('3. Progress Tracker & Status Transitions', () => {
     expect(derivePlanStatus('APPROVED', inProgress)).toBe('IN_PROGRESS');
 
     const completed = { ...initialProgress, completedTasks: 4, pendingTasks: 0, completionPercentage: 100, isComplete: true };
-    expect(derivePlanStatus('IN_PROGRESS', completed)).toBe('COMPLETED');
+    expect(derivePlanStatus('IN_PROGRESS', completed)).toBe('AWAITING_COMPLETION_APPROVAL');
   });
 });
 

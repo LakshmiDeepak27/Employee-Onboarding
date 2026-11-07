@@ -30,6 +30,7 @@ import { validate } from "../middleware/validate.js";
 import { notFound, badRequest, conflict } from "../lib/errors.js";
 import { writeAudit } from "../lib/audit.js";
 import { orchestrator } from "../orchestration/orchestrator.js";
+import { uploadRateLimit } from "../middleware/rateLimit.js";
 import { notifyUsers } from "../lib/notifications.js";
 
 export const workflowRouter = Router();
@@ -217,6 +218,7 @@ workflowRouter.get(
 // POST /api/v1/document-requests/:id/upload
 workflowRouter.post(
   "/document-requests/:id/upload",
+  uploadRateLimit,
   requirePermission("document.upload"),
   async (req, res, next) => {
     try {

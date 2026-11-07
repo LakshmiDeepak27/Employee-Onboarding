@@ -14,6 +14,7 @@ import { validate } from "../middleware/validate.js";
 import { AppError, conflict, notFound } from "../lib/errors.js";
 import { employeeScopeFilter } from "../rbac/scope.js";
 import { jobManager } from "../orchestration/jobManager.js";
+import { inviteRateLimit, planGenerationRateLimit } from "../middleware/rateLimit.js";
 import { writeAudit } from "../lib/audit.js";
 import { LEAVER_MATRIX } from "../orchestration/packGenerator.js";
 import { randomBytes, createHash } from "crypto";
@@ -383,6 +384,7 @@ employeesRouter.patch(
 // POST /api/v1/employees/:id/plans (Async Plan Generation -> 202)
 employeesRouter.post(
   "/:id/plans",
+  planGenerationRateLimit,
   requirePermission("plan.generate", { target: byParam("id") }),
   validate({ body: GeneratePlanRequestSchema }),
   async (req, res, next) => {
@@ -407,6 +409,7 @@ employeesRouter.post(
 // POST /api/v1/employees/:id/invite
 employeesRouter.post(
   "/:id/invite",
+  inviteRateLimit,
   requirePermission("employee.invite", { target: byParam("id") }),
   validate({ body: InviteEmployeeRequestSchema }),
   async (req, res, next) => {
