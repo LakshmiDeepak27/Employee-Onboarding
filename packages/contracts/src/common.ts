@@ -26,6 +26,16 @@ export const Email = z.string().email().toLowerCase().trim().openapi({
   example: "hr.admin@demo.io",
 });
 
+/** App login identities may use the organization's internal CLYORA domain. */
+export const IdentityEmail = z.union([
+  Email,
+  z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9][a-z0-9._-]*@clyora$/, "must be a valid CLYORA work email"),
+]);
+
 /**
  * Password policy. Deliberately explicit so the frontend can mirror the rule
  * without guessing, and so the error message is actionable.
@@ -160,6 +170,7 @@ export const PlanStatusEnum = z.enum([
   "AWAITING_APPROVAL",
   "APPROVED",
   "IN_PROGRESS",
+  "AWAITING_COMPLETION_APPROVAL",
   "COMPLETED",
   "REFUSED",
 ]);
@@ -330,6 +341,7 @@ export const PageMetaSchema = z
     totalPages: z.number().int(),
   })
   .openapi("PageMeta");
+export type PageMeta = z.infer<typeof PageMetaSchema>;
 
 /** Wraps any item schema in the standard list envelope. */
 export function paginated<T extends z.ZodTypeAny>(item: T, name: string) {

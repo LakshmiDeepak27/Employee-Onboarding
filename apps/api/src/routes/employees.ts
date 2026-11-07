@@ -11,13 +11,13 @@ import {
 import { authenticate, requireAuth } from "../middleware/authenticate.js";
 import { requirePermission, byParam } from "../middleware/authorize.js";
 import { validate } from "../middleware/validate.js";
-import { conflict, notFound } from "../lib/errors.js";
+import { AppError, conflict, notFound } from "../lib/errors.js";
 import { employeeScopeFilter } from "../rbac/scope.js";
 import { jobManager } from "../orchestration/jobManager.js";
 import { writeAudit } from "../lib/audit.js";
-import { isProd } from "../config/env.js";
 import { LEAVER_MATRIX } from "../orchestration/packGenerator.js";
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
+import { provisionKeycloakUserAndSendActivation } from "../auth/keycloakAdmin.js";
 
 export const employeesRouter = Router();
 employeesRouter.use(authenticate);
@@ -243,30 +243,7 @@ employeesRouter.post(
       }
 
       if (!employee) {
-        employee = {
-          id: `emp-${randomBytes(6).toString("hex")}`,
-          employeeNumber,
-          firstName: b.firstName,
-          lastName: b.lastName,
-          personalEmail: b.personalEmail,
-          workEmail: b.workEmail ?? null,
-          phone: b.phone ?? null,
-          jobTitle: b.jobTitle,
-          roleFamily: b.roleFamily,
-          departmentId: b.departmentId ?? null,
-          managerId: b.managerId ?? null,
-          jurisdictionCode: b.jurisdictionCode,
-          employmentType: b.employmentType,
-          workMode: b.workMode,
-          offerDate: b.offerDate ? new Date(b.offerDate) : null,
-          startDate: new Date(b.startDate),
-          unionMember: b.unionMember ?? false,
-          notes: b.notes ?? null,
-          status: "PRE_HIRE",
-          department: { name: "Engineering" },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+        throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The employee record could not be saved. Please retry when the database is available.");
       }
 
       IN_MEMORY_EMPLOYEES.set(employee.id, employee);
@@ -433,80 +410,76 @@ employeesRouter.post(
   validate({ body: InviteEmployeeRequestSchema }),
   async (req, res, next) => {
     try {
-      let employee: any = null;
-      if (isDatabaseOnline()) {
-        try {
-          employee = await prisma.employee.findUnique({
-            where: { id: req.params.id },
-          });
-        } catch {
-          setDatabaseOnline(false);
-        }
+      const body = req.body as { sendEmail?: boolean };
+      if (body.sendEmail === false) {
+        throw new AppError(400, "VALIDATION_FAILED", "Employee activation must be sent by email; no reusable password is created or shared.");
       }
-      if (!employee && req.params.id) {
-        employee = IN_MEMORY_EMPLOYEES.get(req.params.id);
+      if (!isDatabaseOnline()) {
+        throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The employee database is unavailable. The invitation was not sent.");
       }
+      const employee = await prisma.employee.findUnique({ where: { id: req.params.id } });
       if (!employee) throw notFound(`Employee`);
 
-      let userId = employee.userId;
-      let inviteToken: string | null = null;
       const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
-
-      if (!userId) {
-        inviteToken = randomBytes(24).toString("base64url");
-        const inviteTokenHash = createHash("sha256").update(inviteToken).digest("hex");
-        userId = `usr-emp-${randomBytes(4).toString("hex")}`;
-
-        if (isDatabaseOnline()) {
-          try {
-            const empRole = await prisma.role.findUnique({
-              where: { key: "employee" },
-            });
-            const user = await prisma.user.create({
-              data: {
-                email: employee.personalEmail,
-                passwordHash: null,
-                status: "INVITED",
-                mustChangePassword: true,
-                inviteTokenHash,
-                inviteExpiresAt: expiresAt,
-              },
-            });
-            userId = user.id;
-
-            if (empRole) {
-              await prisma.userRole.create({
-                data: {
-                  userId: user.id,
-                  roleId: empRole.id,
-                },
-              });
-            }
-
-            await prisma.employee.update({
-              where: { id: employee.id },
-              data: { userId: user.id },
-            });
-          } catch {
-            setDatabaseOnline(false);
-          }
+      const userId = await prisma.$transaction(async (tx) => {
+        const employeeRole = await tx.role.findUnique({ where: { key: "employee" } });
+        if (!employeeRole) throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The employee role is not configured. Run the database seed first.");
+        let user = employee.userId
+          ? await tx.user.findUnique({ where: { id: employee.userId }, include: { userRoles: { include: { role: true } } } })
+          : await tx.user.findUnique({ where: { email: employee.personalEmail }, include: { userRoles: { include: { role: true } } } });
+        if (user && !user.userRoles.some((entry) => entry.role.key === "employee")) {
+          throw conflict("This email is already linked to an account with a different role.");
         }
+        if (user?.status === "SUSPENDED") {
+          throw conflict("This portal account is suspended. An administrator must review it before sending an activation email.");
+        }
+        if (user?.status === "ACTIVE") {
+          throw conflict("This employee account is already active. Use the organization's account recovery process if they cannot sign in.");
+        }
+        if (employee.userId && user && user.email.toLowerCase() !== employee.personalEmail.toLowerCase()) {
+          throw conflict("The linked portal account email does not match this employee's personal email.");
+        }
+        if (!user) {
+          user = await tx.user.create({
+            data: {
+              email: employee.personalEmail,
+              passwordHash: null,
+              authProvider: "oidc",
+              status: "INVITED",
+              mustChangePassword: false,
+              userRoles: { create: [{ roleId: employeeRole.id }] },
+            },
+            include: { userRoles: { include: { role: true } } },
+          });
+        } else if (!user.userRoles.some((entry) => entry.role.key === "employee")) {
+          await tx.userRole.create({ data: { userId: user.id, roleId: employeeRole.id } });
+        }
+        if (employee.userId !== user.id) {
+          await tx.employee.update({ where: { id: employee.id }, data: { userId: user.id } });
+        }
+        return user.id;
+      });
 
-        employee.userId = userId;
-        IN_MEMORY_EMPLOYEES.set(employee.id, employee);
-      }
+      const keycloakUsername = (employee.workEmail?.split("@")[0] || employee.personalEmail.split("@")[0] || "employee").toLowerCase();
+      const activation = await provisionKeycloakUserAndSendActivation({
+        username: keycloakUsername,
+        email: employee.personalEmail,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+      });
 
       await writeAudit(req, {
         action: "employee.invited",
         resourceType: "Employee",
         resourceId: employee.id,
-        after: { userId, email: employee.personalEmail },
+        after: { userId, email: employee.personalEmail, keycloakUsername: activation.username, activationEmailSent: true },
       });
 
-      res.status(200).json({
+      res.status(202).json({
         userId,
         email: employee.personalEmail,
-        inviteToken: isProd ? null : (inviteToken ?? "Onboard!ng2026"),
+        username: activation.username,
+        activationEmailSent: true,
         expiresAt: expiresAt.toISOString(),
       });
     } catch (e) {

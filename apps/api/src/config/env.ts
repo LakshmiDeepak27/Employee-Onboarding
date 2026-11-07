@@ -43,10 +43,12 @@ const EnvSchema = z
     OIDC_CLIENT_SECRET: z.string().min(1).optional(),
     OIDC_REDIRECT_URI: z.string().url().optional(),
     OIDC_SCOPES: z.string().default("openid profile email"),
+    KEYCLOAK_ADMIN_CLIENT_ID: z.string().min(1).optional(),
+    KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().min(1).optional(),
 
     /**
      * Lets teammates build routes before login exists:
-     *   curl -H "x-dev-user: hr.admin@demo.io" localhost:4000/api/v1/employees
+     *   curl -H "x-dev-user: asha.hr@clyora" localhost:4000/api/v1/employees
      * Hard-refused outside development, so it cannot be left on by accident.
      */
     DEV_AUTH_BYPASS: z
@@ -108,6 +110,13 @@ const EnvSchema = z
         code: z.ZodIssueCode.custom,
         path: ["OIDC_ISSUER_URL"],
         message: "OIDC issuer, client id, client secret, and redirect URI must be configured together",
+      });
+    }
+    if (Boolean(cfg.KEYCLOAK_ADMIN_CLIENT_ID) !== Boolean(cfg.KEYCLOAK_ADMIN_CLIENT_SECRET)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["KEYCLOAK_ADMIN_CLIENT_SECRET"],
+        message: "Keycloak user provisioning requires both admin service-account client ID and secret",
       });
     }
     if (cfg.NODE_ENV === "production" && !cfg.OIDC_ISSUER_URL) {

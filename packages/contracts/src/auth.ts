@@ -1,7 +1,7 @@
 import {
   z,
   Uuid,
-  Email,
+  IdentityEmail,
   Password,
   IsoDateTime,
   UserStatusEnum,
@@ -18,7 +18,7 @@ import {
 export const AccessTokenClaimsSchema = z
   .object({
     sub: Uuid.openapi({ description: "User id" }),
-    email: Email,
+    email: IdentityEmail,
     /** Employee record id, when the user is linked to one. */
     eid: Uuid.nullable(),
     roles: z.array(RoleKeyEnum),
@@ -89,7 +89,7 @@ export type SignupRequest = z.infer<typeof SignupRequestSchema>;
 
 export const LoginRequestSchema = z
   .object({
-    email: Email,
+    email: IdentityEmail,
     password: z.string().min(1, "password is required").max(128),
   })
   .openapi("LoginRequest");
@@ -97,7 +97,7 @@ export const LoginRequestSchema = z
 export const AuthUserSchema = z
   .object({
     id: Uuid,
-    email: Email,
+    email: IdentityEmail,
     status: UserStatusEnum,
     mustChangePassword: z.boolean(),
     employeeId: Uuid.nullable(),

@@ -35,6 +35,14 @@ export interface ApprovePlanInput {
   requestId?: string | null;
 }
 
+export interface FinalizeOnboardingInput {
+  actorUserId: string;
+  actorName: string;
+  actorRole: string;
+  reason?: string;
+  requestId?: string | null;
+}
+
 export const IN_MEMORY_PLANS: Map<string, any> = new Map();
 
 export class OnboardingOrchestrator {
@@ -42,13 +50,16 @@ export class OnboardingOrchestrator {
    * Generates or regenerates an onboarding plan for an employee
    */
   async generatePlan(employeeId: string, options: GeneratePlanOptions = {}) {
+    if (!isDatabaseOnline()) {
+      throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The onboarding database is unavailable. No plan was created.");
+    }
     // Stage 1: Profile Intake & Jurisdiction Resolution
     const eligibility = await processEmployeeProfile(employeeId);
     const { profile } = eligibility;
 
     // Check if employee already has an active plan
     let existingPlan: any = null;
-    if (isDatabaseOnline()) {
+    {
       try {
         existingPlan = await prisma.onboardingPlan.findFirst({
           where: {
@@ -59,21 +70,9 @@ export class OnboardingOrchestrator {
         });
       } catch {
         setDatabaseOnline(false);
+        throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Could not load the existing onboarding plan. No plan was created.");
       }
     }
-    if (!existingPlan) {
-      for (const p of IN_MEMORY_PLANS.values()) {
-        if (
-          p.employeeId === employeeId &&
-          p.status !== "REFUSED" &&
-          p.status !== "COMPLETED"
-        ) {
-          existingPlan = p;
-          break;
-        }
-      }
-    }
-
     if (existingPlan && !options.regenerate) {
       throw conflict(
         `An active onboarding plan already exists for this employee (${existingPlan.id}). Use regenerate=true to overwrite.`,
@@ -107,7 +106,7 @@ export class OnboardingOrchestrator {
       };
       IN_MEMORY_PLANS.set(planId, refusalPlan);
 
-      if (isDatabaseOnline()) {
+      {
         try {
           await prisma.$transaction(async (tx) => {
             if (existingPlan && options.regenerate) {
@@ -158,6 +157,8 @@ export class OnboardingOrchestrator {
           });
         } catch {
           setDatabaseOnline(false);
+          IN_MEMORY_PLANS.delete(planId);
+          throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Could not save the escalation record. The refusal was not recorded; try again when the database is available.");
         }
       }
 
@@ -284,8 +285,8 @@ export class OnboardingOrchestrator {
       memEmp.status = "ONBOARDING";
     }
 
-    // Persist to PostgreSQL if connected
-    if (isDatabaseOnline()) {
+    // Persist the plan and audit data before reporting a successful job.
+    {
       try {
         await prisma.$transaction(
           async (tx) => {
@@ -420,6 +421,8 @@ export class OnboardingOrchestrator {
       } catch (error) {
         console.error("Plan persistence failed", error);
         setDatabaseOnline(false);
+        IN_MEMORY_PLANS.delete(finalPlanId);
+        throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Could not save the onboarding plan. No plan was created; try again when the database is available.", { cause: error });
       }
     }
 
@@ -627,6 +630,71 @@ export class OnboardingOrchestrator {
       approvedBy: input.actorName,
       approvedAt: approvedAt.toISOString(),
     };
+  }
+
+  async finalizeOnboarding(planId: string, input: FinalizeOnboardingInput) {
+    if (!isDatabaseOnline()) {
+      throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The onboarding database is unavailable. Final sign-off was not saved.");
+    }
+    const completedAt = new Date();
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const plan = await tx.onboardingPlan.findUnique({
+          where: { id: planId },
+          include: { tasks: true },
+        });
+        if (!plan) throw notFound(`Plan with ID ${planId}`);
+        if (plan.status !== "AWAITING_COMPLETION_APPROVAL") {
+          throw conflict(`Final sign-off is not available while the plan is ${plan.status}.`);
+        }
+        const progress = calculatePlanProgress(plan.tasks.map((task) => ({
+          id: task.id,
+          taskType: task.taskType,
+          status: task.status,
+          reviewState: task.reviewState,
+          dueDate: task.dueDate.toISOString().slice(0, 10),
+        })));
+        if (!progress.isComplete) {
+          throw conflict("Every onboarding task must be completed or explicitly skipped before final sign-off.");
+        }
+        const unresolvedReview = plan.tasks.some((task) =>
+          ["NEEDS_REVIEW", "ESCALATED", "REJECTED"].includes(task.reviewState),
+        );
+        if (unresolvedReview) {
+          throw conflict("Resolve all task reviews before final sign-off.");
+        }
+        await tx.onboardingPlan.update({
+          where: { id: planId },
+          data: { status: "COMPLETED" },
+        });
+        await tx.employee.update({
+          where: { id: plan.employeeId },
+          data: { status: "ACTIVE" },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorUserId: input.actorUserId,
+            actorRole: input.actorRole,
+            action: "onboarding.final_approval",
+            resourceType: "OnboardingPlan",
+            resourceId: planId,
+            reason: input.reason ?? "HR final onboarding sign-off",
+            requestId: input.requestId ?? null,
+            after: { status: "COMPLETED", completedAt: completedAt.toISOString() },
+          },
+        });
+        return {
+          planId,
+          status: "COMPLETED" as const,
+          completedAt: completedAt.toISOString(),
+          completedBy: input.actorName,
+        };
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      setDatabaseOnline(false);
+      throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Could not save final onboarding sign-off.", { cause: error });
+    }
   }
 
   /**
@@ -942,6 +1010,9 @@ export class OnboardingOrchestrator {
 
     const currentTask = task || memTask;
     if (task && task.planId !== planId) throw notFound("Task on plan");
+    if (task && ["AWAITING_COMPLETION_APPROVAL", "COMPLETED"].includes(task.plan.status)) {
+      throw conflict("Tasks are locked after all work is complete and awaiting final HR sign-off.");
+    }
     if (updates.status === "COMPLETED" && task) {
       if (!["APPROVED", "IN_PROGRESS"].includes(task.plan.status))
         throw conflict("Plan must be approved before completion.");
@@ -1099,11 +1170,6 @@ export class OnboardingOrchestrator {
             );
 
             const newStatus = derivePlanStatus(task.plan.status, progress);
-            if (newStatus === "COMPLETED")
-              await tx.employee.update({
-                where: { id: task.plan.employeeId },
-                data: { status: "ACTIVE" },
-              });
             if (newStatus !== task.plan.status) {
               await tx.onboardingPlan.update({
                 where: { id: planId },

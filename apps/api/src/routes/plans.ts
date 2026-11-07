@@ -3,6 +3,7 @@ import { prisma, isDatabaseOnline, setDatabaseOnline } from "../db/client.js";
 import {
   ListPlansQuerySchema,
   ApprovePlanRequestSchema,
+  FinalizeOnboardingRequestSchema,
   UpdatePlanTaskRequestSchema,
   z,
 } from "@eo/contracts";
@@ -280,6 +281,27 @@ plansRouter.post(
       res.json(result);
     } catch (e) {
       next(e);
+    }
+  },
+);
+plansRouter.post(
+  "/:id/completion-approval",
+  requirePermission("plan.approve", { target: (req) => employeeIdForPlan(req.params.id!) }),
+  validate({ body: FinalizeOnboardingRequestSchema }),
+  async (req, res, next) => {
+    try {
+      const actor = requireAuth(req);
+      const body = req.body as z.infer<typeof FinalizeOnboardingRequestSchema>;
+      const result = await orchestrator.finalizeOnboarding(req.params.id!, {
+        actorUserId: actor.userId,
+        actorName: actor.email,
+        actorRole: actor.roles.join(","),
+        reason: body.reason,
+        requestId: req.requestId,
+      });
+      res.json(result);
+    } catch (error) {
+      next(error);
     }
   },
 );

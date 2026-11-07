@@ -317,39 +317,99 @@ export async function login(
 }
 
 export async function loginWithOidc(subject: string, email: string, meta: RequestMeta) {
+  const normalizedEmail = email.toLowerCase().trim();
   const [bySubject, byVerifiedEmail] = await Promise.all([
     prisma.user.findUnique({
       where: { oidcSubject: subject },
-      select: { id: true, oidcSubject: true, status: true },
+      select: { id: true, oidcSubject: true, status: true, email: true, lockedUntil: true },
     }),
     prisma.user.findUnique({
-      where: { email },
-      select: { id: true, oidcSubject: true, status: true },
+      where: { email: normalizedEmail },
+      select: { id: true, oidcSubject: true, status: true, email: true, lockedUntil: true },
     }),
   ]);
+
+  // Reject conflicting mappings: subject and email point to different users
   if (bySubject && byVerifiedEmail && bySubject.id !== byVerifiedEmail.id) {
+    await recordAuthEvent({
+      email: normalizedEmail,
+      type: "LOGIN_FAILED",
+      success: false,
+      reason: "Conflicting SSO identity: subject and email belong to different accounts",
+      meta,
+    });
     throw unauthenticated("The SSO identity conflicts with the provisioned account", "TOKEN_INVALID");
   }
+
+  // Reject if email is already bound to a different subject
+  if (byVerifiedEmail?.oidcSubject && byVerifiedEmail.oidcSubject !== subject) {
+    await recordAuthEvent({
+      userId: byVerifiedEmail.id,
+      email: normalizedEmail,
+      type: "LOGIN_FAILED",
+      success: false,
+      reason: `Account already linked to subject ${byVerifiedEmail.oidcSubject}, received ${subject}`,
+      meta,
+    });
+    throw unauthenticated("The SSO identity conflicts with the provisioned account", "TOKEN_INVALID");
+  }
+
+  // Reject if subject is already bound to a different email
+  if (bySubject && bySubject.email.toLowerCase() !== normalizedEmail) {
+    await recordAuthEvent({
+      userId: bySubject.id,
+      email: normalizedEmail,
+      type: "LOGIN_FAILED",
+      success: false,
+      reason: `SSO subject is linked to ${bySubject.email}, but login presented ${normalizedEmail}`,
+      meta,
+    });
+    throw unauthenticated("The SSO identity conflicts with the provisioned account", "TOKEN_INVALID");
+  }
+
   const user = bySubject ?? byVerifiedEmail;
 
   if (!user) {
     await recordAuthEvent({
-      email,
+      email: normalizedEmail,
       type: "LOGIN_FAILED",
       success: false,
       reason: "OIDC identity is not provisioned",
       meta,
     });
-    throw unauthenticated("Your organization account is not provisioned for this application");
+    throw unauthenticated(
+      "This Keycloak email is not provisioned in CLYORA. Bootstrap the initial HR email in the app database; managers and employees need an HR invitation and app role.",
+    );
   }
-  if (user.status === "SUSPENDED" || user.status === "LOCKED") {
-    throw unauthenticated("Account is suspended or locked");
+
+  if (user.status === "SUSPENDED") {
+    await recordAuthEvent({
+      userId: user.id,
+      email: normalizedEmail,
+      type: "LOGIN_FAILED",
+      success: false,
+      reason: "Account suspended",
+      meta,
+    });
+    throw unauthenticated("Account is suspended");
+  }
+
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    await recordAuthEvent({
+      userId: user.id,
+      email: normalizedEmail,
+      type: "LOGIN_FAILED",
+      success: false,
+      reason: "Account locked",
+      meta,
+    });
+    throw unauthenticated("Account is temporarily locked");
   }
 
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      oidcSubject: user.oidcSubject ?? subject,
+      oidcSubject: subject,
       authProvider: "oidc",
       lastLoginAt: new Date(),
       failedLoginCount: 0,
@@ -357,7 +417,7 @@ export async function loginWithOidc(subject: string, email: string, meta: Reques
       status: user.status === "INVITED" ? "ACTIVE" : user.status,
     },
   });
-  await recordAuthEvent({ userId: user.id, email, type: "LOGIN_SUCCESS", success: true, meta });
+  await recordAuthEvent({ userId: user.id, email: normalizedEmail, type: "LOGIN_SUCCESS", success: true, meta });
   return buildSession(user.id, meta);
 }
 
@@ -365,10 +425,13 @@ export async function acceptInvite(token: string, newPassword: string, meta: Req
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const user = await prisma.user.findFirst({
     where: { inviteTokenHash: tokenHash },
-    select: { id: true, email: true, status: true, inviteExpiresAt: true },
+    select: { id: true, email: true, status: true, inviteExpiresAt: true, lockedUntil: true },
   });
   if (!user || !user.inviteExpiresAt || user.inviteExpiresAt <= new Date()) {
     throw unauthenticated("Invitation is invalid or expired", "TOKEN_INVALID");
+  }
+  if (user.status === "SUSPENDED" || (user.lockedUntil && user.lockedUntil > new Date())) {
+    throw unauthenticated("Account is suspended or locked");
   }
   await prisma.user.update({
     where: { id: user.id },

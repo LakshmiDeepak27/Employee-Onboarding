@@ -47,13 +47,16 @@ export function Dashboard() {
   const people = useQuery({
     queryKey: ["people", "count"],
     queryFn: () => api.employees.list({ pageSize: 1 }),
+    // Roles without employee.read should not fire an API request they are
+    // expected to be denied. This also keeps employee dashboards clean.
+    enabled: can(user, "employee.read"),
   });
   const rows = plans.data?.items ?? [];
   const open = rows.filter(
     (p) => !["COMPLETED", "CANCELLED", "REFUSED"].includes(p.status),
   );
   const review = rows.filter((p) =>
-    ["DRAFT", "AWAITING_APPROVAL"].includes(p.status),
+    ["DRAFT", "AWAITING_APPROVAL", "AWAITING_COMPLETION_APPROVAL"].includes(p.status),
   );
   const total = rows.reduce((n, p) => n + p.taskCount, 0);
   const done = rows.reduce((n, p) => n + p.completedCount, 0);
@@ -139,7 +142,9 @@ export function Dashboard() {
             value={
               w === "hr"
                 ? review.length
-                : people.isError
+                : !can(user, "employee.read")
+                  ? "—"
+                  : people.isError
                   ? "Unavailable"
                   : (people.data?.meta.totalItems ?? "—")
             }
@@ -578,6 +583,16 @@ export function CreateEmployee() {
               </label>
             ))}
             <label>
+              Work identity email (optional)
+              <input
+                name="workEmail"
+                type="text"
+                placeholder="alex@clyora"
+                autoComplete="off"
+              />
+              <small>Its username prefix is used in Keycloak. The activation email goes to the personal email above.</small>
+            </label>
+            <label>
               Department
               <select name="departmentId">
                 <option value="">Not assigned</option>
@@ -709,6 +724,10 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
     mutationFn: () => api.plans.generate(id!, { forceBaseline: baseline }),
     onSuccess: (r) => setJob(r.jobId),
   });
+  const invite = useMutation({
+    mutationFn: () => api.employees.invite(id!),
+    onSuccess: () => cache.invalidateQueries({ queryKey: ["employee", id] }),
+  });
   const offboard = useMutation({
     mutationFn: () => api.employees.offboard(id!, { reason }),
     onSuccess: () => {
@@ -773,45 +792,88 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
               </dl>
             </Panel>
             <div>
+              {can(user, "employee.invite") && (
+                <Panel
+                  title="Employee portal access"
+                  description="Create or match their Keycloak account and email a one-time link to verify their address and choose a password."
+                >
+                  <div className="panel-body form-vertical">
+                    <p style={{ margin: 0, color: "var(--muted)", fontSize: "13px" }}>
+                      The activation link goes to {e.personalEmail}. No password is generated or shared by HR.
+                    </p>
+                    <button
+                      className="button primary"
+                      disabled={invite.isPending}
+                      onClick={() => invite.mutate()}
+                    >
+                      {invite.isPending ? "Sending activation link…" : "Send employee activation link"}
+                    </button>
+                    <Feedback
+                      error={invite.error}
+                      success={invite.isSuccess ? `Activation email sent to ${invite.data.email}. The link expires in 7 days.` : undefined}
+                    />
+                  </div>
+                </Panel>
+              )}
               <Panel
                 title="Onboarding journey"
                 description="A plan connects the employee to the right work."
               >
-                <div className="panel-body">
+                <div className="panel-body form-vertical">
                   {e.activePlanId ? (
-                    <Link
-                      className="button primary"
-                      to={`/${w}/${w === "hr" ? "plans" : "onboarding"}/${e.activePlanId}`}
-                    >
-                      Open active plan <ArrowRight size={16} />
-                    </Link>
+                    <div className="active-plan-card">
+                      <div className="active-plan-header">
+                        <span className="badge" style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" }}>
+                          Active plan available
+                        </span>
+                      </div>
+                      <p style={{ margin: "4px 0 10px", fontSize: "13px", color: "var(--muted)" }}>
+                        An onboarding plan is currently active for this employee.
+                      </p>
+                      <Link
+                        className="button primary"
+                        to={`/${w}/${w === "hr" ? "plans" : "onboarding"}/${e.activePlanId}`}
+                        style={{ alignSelf: "flex-start" }}
+                      >
+                        Open active plan <ArrowRight size={16} />
+                      </Link>
+                    </div>
                   ) : (
-                    <p>No active plan has been generated.</p>
+                    <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: "13px" }}>
+                      No active plan has been generated yet.
+                    </p>
                   )}
                   {can(user, "plan.generate") && (
-                    <>
-                      <label className="checkbox-label">
+                    <div className="generate-plan-section">
+                      <h4 className="section-title">
+                        {e.activePlanId ? "Regenerate onboarding plan" : "Generate onboarding plan"}
+                      </h4>
+                      <p style={{ margin: "2px 0 8px", color: "var(--muted)", fontSize: "13px" }}>
+                        Synthesizes role-based tasks, compliance dependencies, and jurisdiction statutory rules.
+                      </p>
+                      <label className="checkbox-label" style={{ margin: "6px 0 12px" }}>
                         <input
                           type="checkbox"
                           checked={baseline}
                           onChange={(e) => setBaseline(e.target.checked)}
                         />
-                        Use policy templates only (skip AI)
+                        <span>Use policy templates only (skip AI)</span>
                       </label>
                       <button
-                        className="button primary"
+                        className={`button ${e.activePlanId ? "secondary" : "primary"}`}
                         disabled={generate.isPending || !!job}
                         onClick={() => generate.mutate()}
+                        style={{ alignSelf: "flex-start" }}
                       >
                         {generate.isPending
                           ? "Starting…"
                           : "Generate onboarding plan"}
                       </button>
                       <Feedback error={generate.error} />
-                    </>
+                    </div>
                   )}
                   {job && (
-                    <div className="notice">
+                    <div className="notice" style={{ marginTop: "14px" }}>
                       <QueryState query={state}>
                         <strong>{human(state.data?.status)}</strong>
                         <p>{state.data?.error ?? human(state.data?.stage)}</p>
@@ -842,27 +904,31 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
                   description="Record departure and initiate the existing offboarding workflow."
                 >
                   <form
-                    className="panel-body"
+                    className="panel-body form-vertical"
                     onSubmit={(event) => {
                       event.preventDefault();
                       offboard.mutate();
                     }}
                   >
-                    <label>
-                      Departure reason
+                    <label className="form-field">
+                      <span className="field-label">Departure reason <span className="field-required">*</span></span>
                       <textarea
                         required
                         minLength={3}
+                        rows={3}
+                        placeholder="e.g. Voluntary resignation, end of contract, relocation..."
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                       />
                     </label>
-                    <button
-                      className="button secondary"
-                      disabled={offboard.isPending}
-                    >
-                      Start offboarding
-                    </button>
+                    <div className="form-actions" style={{ marginTop: "4px" }}>
+                      <button
+                        className="button secondary danger-hover"
+                        disabled={offboard.isPending}
+                      >
+                        {offboard.isPending ? "Starting offboarding…" : "Start offboarding"}
+                      </button>
+                    </div>
                     <Feedback
                       error={offboard.error}
                       success={
@@ -895,7 +961,7 @@ export function Plans({ approvals = false }: { approvals?: boolean }) {
   });
   const rows = approvals
     ? q.data?.items.filter((p) =>
-        ["DRAFT", "AWAITING_APPROVAL"].includes(p.status),
+        ["DRAFT", "AWAITING_APPROVAL", "AWAITING_COMPLETION_APPROVAL"].includes(p.status),
       )
     : q.data?.items;
   return (
@@ -926,6 +992,7 @@ export function Plans({ approvals = false }: { approvals?: boolean }) {
               "AWAITING_APPROVAL",
               "APPROVED",
               "IN_PROGRESS",
+              "AWAITING_COMPLETION_APPROVAL",
               "COMPLETED",
               "REFUSED",
             ].map((s) => (
@@ -935,9 +1002,11 @@ export function Plans({ approvals = false }: { approvals?: boolean }) {
           <button
             className="icon-button"
             aria-label="Refresh plans"
+            title={q.isFetching ? "Refreshing plans…" : "Refresh plans"}
+            disabled={q.isFetching}
             onClick={() => q.refetch()}
           >
-            <RefreshCw size={17} />
+            <RefreshCw size={17} className={q.isFetching ? "spinning" : ""} />
           </button>
         </div>
         <QueryState query={q}>
@@ -1061,7 +1130,9 @@ export function TaskRows({
                           })
                         }
                       >
-                        {t.reviewState === "OK"
+                        {update.isPending && update.variables?.t.id === t.id
+                          ? "Saving…"
+                          : t.reviewState === "OK"
                           ? "Reopen review"
                           : "Mark reviewed"}
                       </button>
@@ -1153,6 +1224,7 @@ export function PlanDetails() {
   const cache = useQueryClient();
   const [tab, setTab] = useState("Tasks");
   const [ack, setAck] = useState(false);
+  const [finalAck, setFinalAck] = useState(false);
   const [reason, setReason] = useState("");
   const q = useQuery({
     queryKey: ["plan", planId],
@@ -1181,6 +1253,13 @@ export function PlanDetails() {
       void cache.invalidateQueries();
     },
   });
+  const finalize = useMutation({
+    mutationFn: () => api.plans.finalize(planId!, reason.trim() || undefined),
+    onSuccess: () => {
+      setFinalAck(false);
+      void cache.invalidateQueries();
+    },
+  });
   const p = q.data;
   return (
     <>
@@ -1203,6 +1282,16 @@ export function PlanDetails() {
             )}
             {p.degradedReason && (
               <p className="notice warning">{p.degradedReason}</p>
+            )}
+            {p.status === "AWAITING_COMPLETION_APPROVAL" && (
+              <p className="notice" role="status">
+                Your onboarding tasks are complete. HR is reviewing the final sign-off; no further action is needed from you right now.
+              </p>
+            )}
+            {p.status === "COMPLETED" && user?.roles.includes("employee") && (
+              <p className="notice" role="status">
+                Your onboarding is complete. HR has approved your final sign-off.
+              </p>
             )}
             <div className="tabs" role="tablist" aria-label="Plan sections">
               {[
@@ -1299,24 +1388,28 @@ export function PlanDetails() {
                   title="Review & decision"
                   description="Resolve outstanding task reviews before approving. Approval authorizes workflow dispatch."
                 >
-                  <div className="panel-body">
-                    <label>
-                      Decision notes
+                  <div className="panel-body form-vertical">
+                    <label className="form-field">
+                      <span className="field-label">Decision notes</span>
                       <textarea
                         value={reason}
                         maxLength={500}
+                        rows={3}
                         onChange={(e) => setReason(e.target.value)}
-                        placeholder="Explain the decision or required changes"
+                        placeholder="Explain the approval decision, or specify changes required if rejecting..."
                       />
+                      <small className="field-hint">Required when rejecting a plan. Optional for approvals.</small>
                     </label>
-                    <label className="checkbox-label">
+                    <label className="checkbox-label" style={{ margin: "4px 0 12px" }}>
                       <input
                         type="checkbox"
                         checked={ack}
                         onChange={(e) => setAck(e.target.checked)}
                       />
-                      I have reviewed this plan and accept responsibility for
-                      this decision.
+                      <span>
+                        I have reviewed this plan and accept responsibility for
+                        this decision.
+                      </span>
                     </label>
                     <Feedback
                       error={approval.error}
@@ -1324,13 +1417,15 @@ export function PlanDetails() {
                         approval.isSuccess ? "Decision saved." : undefined
                       }
                     />
-                    <div className="actions">
+                    <div className="actions" style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
                       <button
-                        className="button secondary"
+                        className="button secondary button-danger-outline"
                         disabled={!ack || !reason.trim() || approval.isPending}
                         onClick={() => approval.mutate("REJECT")}
                       >
-                        Reject plan
+                        {approval.isPending && approval.variables === "REJECT"
+                          ? "Saving decision…"
+                          : "Reject plan"}
                       </button>
                       <button
                         className="button primary"
@@ -1338,12 +1433,32 @@ export function PlanDetails() {
                         onClick={() => approval.mutate("APPROVE")}
                       >
                         <FileCheck2 size={16} />
-                        Approve & dispatch
+                        {approval.isPending
+                          ? approval.variables === "APPROVE" ? "Approving & dispatching…" : "Saving decision…"
+                          : "Approve & dispatch"}
                       </button>
                     </div>
                   </div>
                 </Panel>
               )}
+            {can(user, "plan.approve") && p.status === "AWAITING_COMPLETION_APPROVAL" && (
+              <Panel
+                title="Final onboarding sign-off"
+                description="All journey tasks are complete. HR reviews the final record here before the employee is marked active."
+              >
+                <div className="panel-body form-vertical">
+                  <p>Confirm the employee’s onboarding work is complete and any remaining items are intentionally skipped.</p>
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={finalAck} onChange={(event) => setFinalAck(event.target.checked)} />
+                    <span>I reviewed the completed onboarding and approve final sign-off.</span>
+                  </label>
+                  <Feedback error={finalize.error} success={finalize.isSuccess ? "Final sign-off saved. The employee is now active." : undefined} />
+                  <button className="button primary" disabled={!finalAck || finalize.isPending} onClick={() => finalize.mutate()}>
+                    {finalize.isPending ? "Saving final approval…" : "Approve completed onboarding"}
+                  </button>
+                </div>
+              </Panel>
+            )}
           </>
         )}
       </QueryState>

@@ -1,9 +1,7 @@
 import { Router, type Request } from "express";
 import crypto from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import rateLimit from "express-rate-limit";
 import {
-  LoginRequestSchema,
   AcceptInviteRequestSchema,
   RefreshRequestSchema,
   LogoutRequestSchema,
@@ -12,7 +10,7 @@ import {
 import { validate } from "../middleware/validate.js";
 import { authenticate, requireAuth } from "../middleware/authenticate.js";
 import { requirePermission } from "../middleware/authorize.js";
-import { AppError, unauthenticated } from "../lib/errors.js";
+import { unauthenticated } from "../lib/errors.js";
 import { env, isProd } from "../config/env.js";
 import * as auth from "./service.js";
 
@@ -28,22 +26,6 @@ function meta(req: Request): auth.RequestMeta {
   };
 }
 
-/** Brute-force protection, on top of the per-account lockout in the service. */
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60_000,
-  limit: 10,
-  standardHeaders: "draft-7",
-  legacyHeaders: false,
-  keyGenerator: (req) =>
-    `${req.ip}:${String((req.body as { email?: string })?.email ?? "")}`,
-  message: {
-    error: {
-      code: "RATE_LIMITED",
-      message: "Too many sign-in attempts. Try again in a few minutes.",
-    },
-  },
-});
-
 function setRefreshCookie(
   res: Parameters<Parameters<typeof authRouter.post>[1]>[1],
   token: string,
@@ -51,7 +33,7 @@ function setRefreshCookie(
   res.cookie(REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: isProd,
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/api/v1/auth",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
@@ -100,6 +82,10 @@ authRouter.get("/oidc/start", async (_req, res, next) => {
       redirect_uri: env.OIDC_REDIRECT_URI!,
       response_type: "code",
       scope: env.OIDC_SCOPES,
+      // The application session may be signed out while the Keycloak SSO
+      // session remains active. Force Keycloak to authenticate the requested
+      // account again so another user can choose their own identity.
+      prompt: "login",
       state,
       nonce,
       code_challenge: challenge,
@@ -114,14 +100,25 @@ authRouter.get("/oidc/start", async (_req, res, next) => {
 authRouter.get("/oidc/callback", async (req, res, next) => {
   try {
     if (!oidcConfigured()) throw unauthenticated("Organization SSO is not configured");
+
+    if (req.query.error) {
+      const errorDesc = typeof req.query.error_description === "string"
+        ? req.query.error_description
+        : String(req.query.error);
+      throw unauthenticated(errorDesc || "Sign-in was cancelled or denied by your organization identity provider.");
+    }
+
     const storedRaw = (req.cookies as Record<string, string> | undefined)?.[OIDC_STATE_COOKIE];
     const stored = storedRaw
       ? (JSON.parse(storedRaw) as { state: string; nonce: string; verifier: string })
       : null;
     const code = typeof req.query.code === "string" ? req.query.code : null;
     const state = typeof req.query.state === "string" ? req.query.state : null;
-    if (!stored || !code || !state || state !== stored.state) {
-      throw unauthenticated("Invalid SSO callback", "TOKEN_INVALID");
+    if (!stored) {
+      throw unauthenticated("Your sign-in session expired. Please click Continue with organization SSO to try again.");
+    }
+    if (!code || !state || state !== stored.state) {
+      throw unauthenticated("Invalid SSO state. Potential cross-site request detected.", "TOKEN_INVALID");
     }
     const discovery = await oidcDiscovery();
     const tokenResponse = await fetch(discovery.token_endpoint, {
@@ -136,7 +133,7 @@ authRouter.get("/oidc/callback", async (req, res, next) => {
         code_verifier: stored.verifier,
       }),
     });
-    if (!tokenResponse.ok) throw unauthenticated("SSO token exchange failed");
+    if (!tokenResponse.ok) throw unauthenticated("Failed to exchange authorization code with identity provider.");
     const tokenPayload = (await tokenResponse.json()) as { id_token?: string };
     if (!tokenPayload.id_token) throw unauthenticated("SSO provider returned no identity token");
     const verified = await jwtVerify(tokenPayload.id_token, createRemoteJWKSet(new URL(discovery.jwks_uri)), {
@@ -147,16 +144,24 @@ authRouter.get("/oidc/callback", async (req, res, next) => {
       throw unauthenticated("Invalid SSO nonce", "TOKEN_INVALID");
     }
     if (verified.payload.email_verified !== true) {
-      throw unauthenticated("Your identity provider must verify your email address");
+      throw unauthenticated("Your identity provider email address is not verified. Please verify your email before logging in.");
     }
     const email = typeof verified.payload.email === "string" ? verified.payload.email.toLowerCase() : null;
     const subject = verified.payload.sub;
-    if (!email || !subject) throw unauthenticated("SSO identity has no usable email");
+    if (!email || !subject) throw unauthenticated("SSO identity has no usable email or subject");
     const session = await auth.loginWithOidc(subject, email, meta(req));
     setRefreshCookie(res, session.refreshToken);
     res.clearCookie(OIDC_STATE_COOKIE, { path: "/api/v1/auth" });
-    res.redirect(`${env.CORS_ORIGIN.split(",")[0]!.trim()}/?sso=success`);
-  } catch (e) {
+    const frontend = env.CORS_ORIGIN.split(",")[0]!.trim();
+    res.redirect(`${frontend}/login?sso=success`);
+  } catch (e: any) {
+    res.clearCookie(OIDC_STATE_COOKIE, { path: "/api/v1/auth" });
+    const acceptsHtml = req.accepts(["html", "json"]) === "html" || !req.headers.accept || req.headers.accept.includes("text/html");
+    if (acceptsHtml) {
+      const frontend = env.CORS_ORIGIN.split(",")[0]!.trim();
+      const message = e instanceof Error ? e.message : "SSO authentication failed";
+      return res.redirect(`${frontend}/login?error=${encodeURIComponent(message)}`);
+    }
     next(e);
   }
 });
@@ -179,11 +184,9 @@ authRouter.post("/signup", (_req, res) => {
 // POST /api/v1/auth/forgot-password
 authRouter.post("/forgot-password", async (req, res, next) => {
   try {
-    const email = (req.body?.email || "").toLowerCase().trim();
     res.status(200).json({
       success: true,
-      message: `Password reset instructions have been dispatched to ${email || "your email"}.`,
-      demoNote: "For instant demo evaluation, you can sign in with password 'Onboard!ng2026'.",
+      message: "Passwords are managed by your organization’s Keycloak account. Contact your identity administrator for account recovery.",
     });
   } catch (e) {
     next(e);
@@ -192,22 +195,7 @@ authRouter.post("/forgot-password", async (req, res, next) => {
 // POST /api/v1/auth/login
 authRouter.post(
   "/login",
-  loginLimiter,
-  validate({ body: LoginRequestSchema }),
-  async (req, res, next) => {
-    try {
-      if (isProd) throw unauthenticated("Use organization SSO to sign in");
-      const { email, password } = req.body as {
-        email: string;
-        password: string;
-      };
-      const session = await auth.login(email, password, meta(req));
-      setRefreshCookie(res, session.refreshToken);
-      res.status(200).json(session);
-    } catch (e) {
-      next(e);
-    }
-  },
+  (_req, _res, next) => next(unauthenticated("Password sign-in is disabled. Use organization SSO.")),
 );
 // POST /api/v1/auth/refresh
 authRouter.post(

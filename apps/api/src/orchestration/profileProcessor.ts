@@ -97,16 +97,9 @@ export async function processEmployeeProfile(
     status: employee.status,
   };
 
-  // If jurisdiction does not have an approved policy corpus, the system must REFUSE rather
-  // than hallucinate statutory tasks (API Contract: UNSUPPORTED_JURISDICTION)
-  if (!hasPolicyCorpus) {
-    return {
-      eligible: false,
-      refusalReason: `No approved policy corpus covers ${profile.employmentType} onboarding in ${profile.jurisdictionCode} (${profile.jurisdictionName}). Refusal is required by system governance.`,
-      profile,
-    };
-  }
-
+  // A missing policy corpus must not block the operational onboarding floor.
+  // The rules engine emits only non-legal setup tasks; RAG returns a grounded
+  // fallback reason, and no jurisdiction-specific legal tasks are invented.
   return {
     eligible: true,
     profile,

@@ -1,6 +1,5 @@
 import type { z } from "zod";
 import {
-  type LoginRequest,
   type SignupRequest,
   type LoginResponse,
   type AuthUser,
@@ -13,6 +12,7 @@ import {
   type ChatRequest,
   type ChatResponse,
   type CreateEmployeeRequest,
+  type CreatePolicyDocumentRequest,
   UpdateEmployeeRequestSchema,
   JobStateSchema,
   PlanRisksResponseSchema,
@@ -172,8 +172,6 @@ export function restoreSession(): Promise<AuthUser | null> {
 
 export const api = {
   auth: {
-    login: (input: LoginRequest) =>
-      request<LoginResponse>("/auth/login", { method: "POST", body: input }),
     signup: (input: SignupRequest) =>
       request<LoginResponse>("/auth/signup", { method: "POST", body: input }),
     forgotPassword: (email: string) =>
@@ -222,7 +220,8 @@ export const api = {
       request<{
         userId: string;
         email: string;
-        inviteToken: string | null;
+        username: string;
+        activationEmailSent: boolean;
         expiresAt: string;
       }>(`/employees/${id}/invite`, {
         method: "POST",
@@ -273,6 +272,11 @@ export const api = {
         method: "POST",
         body: input,
       }),
+    finalize: (id: string, reason?: string) =>
+      request<{ planId: string; status: string; completedAt: string; completedBy: string }>(
+        `/plans/${id}/completion-approval`,
+        { method: "POST", body: { acknowledgement: true, reason } },
+      ),
     updateTask: (
       planId: string,
       taskId: string,
@@ -299,6 +303,8 @@ export const api = {
   },
 
   policies: {
+    create: (body: CreatePolicyDocumentRequest) =>
+      request<any>("/policies", { method: "POST", body }),
     list: (params: Record<string, string | number> = {}) =>
       request<{
         items: any[];

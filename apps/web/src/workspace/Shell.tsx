@@ -34,6 +34,7 @@ export function Shell({ workspace }: { workspace: Workspace }) {
   const [search, setSearch] = useState("");
   const [notifications, setNotifications] = useState(false);
   const [error, setError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
   const items = navigation[workspace].filter(
     (i) => !i.permission || can(user, i.permission),
   );
@@ -216,14 +217,25 @@ export function Shell({ workspace }: { workspace: Workspace }) {
           </button>
           <button
             type="button"
+            disabled={signingOut}
+            aria-busy={signingOut}
             onClick={() => {
+              if (signingOut) return;
+              setSigningOut(true);
               setError("");
               void signOut().catch((e: Error) => setError(e.message));
+              navigate("/login?signedOut=1", { replace: true });
             }}
             title="Sign out"
           >
-            <LogOut size={18} />
-            <span>Sign out</span>
+            {signingOut ? (
+              <span className="spinner" aria-hidden="true" />
+            ) : (
+              <LogOut size={18} />
+            )}
+            <span role={signingOut ? "status" : undefined}>
+              {signingOut ? "Signing out…" : "Sign out"}
+            </span>
           </button>
         </div>
       </aside>

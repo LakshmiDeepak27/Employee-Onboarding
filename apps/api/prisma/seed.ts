@@ -97,8 +97,8 @@ async function seedJurisdictions() {
       timezone: 'Asia/Kolkata',
     },
     {
-      // Deliberately left WITHOUT a policy corpus so the refusal path can be
-      // demonstrated: generating a plan here must refuse and escalate.
+      // Deliberately left without a policy corpus so the safe internal-only
+      // onboarding fallback can be demonstrated.
       code: 'SG',
       displayName: 'Singapore',
       countryCode: 'SG',
@@ -208,9 +208,9 @@ async function seedCatalogs() {
 /**
  * Three demo accounts, one per role, so the whole team can sign in and the
  * scope rules are visible immediately:
- *   hr.admin@demo.io  sees everything
- *   manager@demo.io   sees only priya (their direct report)
- *   priya@demo.io     sees only herself
+ *   asha.hr@clyora sees everything
+ *   david.manager@clyora sees only priya (their direct report)
+ *   priya@clyora sees only herself
  */
 async function seedDemoUsers() {
   console.log('  demo users and employees...');
@@ -231,9 +231,9 @@ async function seedDemoUsers() {
     return user;
   }
 
-  const hrUser = await makeUser('hr.admin@demo.io', 'hr_admin');
-  const mgrUser = await makeUser('manager@demo.io', 'manager');
-  const empUser = await makeUser('priya@demo.io', 'employee');
+  const hrUser = await makeUser('asha.hr@clyora', 'hr_admin');
+  const mgrUser = await makeUser('david.manager@clyora', 'manager');
+  const empUser = await makeUser('priya@clyora', 'employee');
 
   const eng = await prisma.department.findUniqueOrThrow({ where: { code: 'ENG' } });
 
@@ -339,9 +339,41 @@ async function seedDemoUsers() {
   });
 }
 
+/** Explicit one-time/bootstrap identity; role assignment is database-side. */
+async function seedBootstrapHr() {
+  const email = process.env.BOOTSTRAP_HR_EMAIL?.trim().toLowerCase();
+  if (!email) return;
+  if (!/^[a-z0-9][a-z0-9._-]*\.hr@clyora$/.test(email)) {
+    throw new Error('BOOTSTRAP_HR_EMAIL must use <username>.hr@clyora');
+  }
+  const hrRole = await prisma.role.findUniqueOrThrow({ where: { key: 'hr_admin' } });
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    include: { userRoles: { include: { role: true } } },
+  });
+  if (existing) {
+    if (!existing.userRoles.some((entry) => entry.role.key === 'hr_admin')) {
+      throw new Error(`Account ${email} already exists without hr_admin; refusing to elevate it during bootstrap`);
+    }
+    console.log(`  bootstrap HR account already provisioned: ${email}`);
+    return;
+  }
+  await prisma.user.create({
+    data: {
+      email,
+      status: 'INVITED',
+      mustChangePassword: false,
+      authProvider: 'oidc',
+      userRoles: { create: [{ roleId: hrRole.id }] },
+    },
+  });
+  console.log(`  provisioned initial HR OIDC account: ${email}`);
+}
+
 async function main() {
   console.log('\nSeeding Employee Onboarding database\n');
   await seedRbac();
+  await seedBootstrapHr();
   if (process.env.SEED_REFERENCE_DATA === 'true') {
     await seedJurisdictions();
     await seedDepartments();

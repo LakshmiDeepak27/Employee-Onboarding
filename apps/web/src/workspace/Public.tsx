@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowRight,
@@ -7,7 +7,6 @@ import {
   Users,
   Eye,
   EyeOff,
-  UserRound,
   FileText,
   Laptop,
   Wallet,
@@ -162,33 +161,6 @@ export function Landing() {
                 <Users size={16} />
                 Explore role experiences
               </a>
-            </div>
-            <div className="landing-demo-bar">
-              <span className="landing-demo-label">Try a demo role</span>
-              <Link
-                className="landing-demo-pill"
-                to="/login"
-                state={{ defaultRole: "HR Administrator" }}
-              >
-                <ShieldCheck size={14} />
-                HR Admin
-              </Link>
-              <Link
-                className="landing-demo-pill"
-                to="/login"
-                state={{ defaultRole: "Manager" }}
-              >
-                <Users size={14} />
-                Manager
-              </Link>
-              <Link
-                className="landing-demo-pill"
-                to="/login"
-                state={{ defaultRole: "New Employee" }}
-              >
-                <UserRound size={14} />
-                Employee
-              </Link>
             </div>
           </div>
         </section>
@@ -392,63 +364,23 @@ export function Landing() {
   );
 }
 
-type DemoRole = "HR Administrator" | "New Employee" | "Manager";
-
-const demoAccounts: Record<DemoRole, { email: string; password: string }> = {
-  "HR Administrator": {
-    email: "hr.admin@demo.io",
-    password: "Onboard!ng2026",
-  },
-  Manager: { email: "manager@demo.io", password: "Onboard!ng2026" },
-  "New Employee": {
-    email: "priya@demo.io",
-    password: "Onboard!ng2026",
-  },
-};
-
 export function Login() {
-  const { signIn, error: sessionError } = useSession();
+  const { user, loading, signingOut, error: sessionError } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const stateRole = (location.state as { defaultRole?: string } | null)?.defaultRole;
-  const initialRole: DemoRole =
-    stateRole === "Manager"
-      ? "Manager"
-      : stateRole === "New Employee"
-        ? "New Employee"
-        : "HR Administrator";
-  const [role, setRole] = useState<DemoRole>(initialRole);
-  const [email, setEmail] = useState(demoAccounts[initialRole].email);
-  const [password, setPassword] = useState(demoAccounts[initialRole].password);
-  const [remember, setRemember] = useState(true);
-  const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const searchParams = new URLSearchParams(location.search);
+  const ssoError = searchParams.get("error");
+  const displaySsoError = ssoError?.includes("not provisioned in CLYORA")
+    ? "Your organization sign-in worked, but HR has not provisioned this account in CLYORA yet. Ask HR to add your exact Keycloak email and assign your app role. For the first HR account, set BOOTSTRAP_HR_EMAIL to that email and run the database seed command."
+    : ssoError;
+  const ssoSuccess = searchParams.get("sso") === "success";
+  const signedOut = searchParams.get("signedOut") === "1";
+  const [startingSso, setStartingSso] = useState(false);
 
-  const handleRoleChange = (next: DemoRole) => {
-    setRole(next);
-    setError("");
-    setEmail(demoAccounts[next].email);
-    setPassword(demoAccounts[next].password);
-  };
-
-  async function submit(e?: FormEvent) {
-    if (e) e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const u = await signIn(email, password);
-      const from = (location.state as { from?: string } | null)?.from;
-      navigate(
-        from?.startsWith("/") && !from.startsWith("//") ? from : homeFor(u),
-        { replace: true },
-      );
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Invalid credentials.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  useEffect(() => {
+    if (loading || !user) return;
+    navigate(homeFor(user), { replace: true });
+  }, [loading, user, navigate]);
 
   return (
     <div className="auth-split-container">
@@ -456,137 +388,73 @@ export function Login() {
       <div className="auth-right-panel">
         <div className="auth-form-card">
           <div className="auth-top-nav-row">
-            <Link to="/" className="auth-back-link">
-              ← Back to CLYORA
-            </Link>
+            <Link to="/" className="auth-back-link">← Back to CLYORA</Link>
           </div>
-          <div className="auth-mobile-brand">
-            <BrandMark />
-          </div>
+          <div className="auth-mobile-brand"><BrandMark /></div>
           <h1 className="auth-heading">Welcome back</h1>
-          <p className="auth-subheading">
-            Sign in to continue your onboarding workspace.
-          </p>
+          <p className="auth-subheading">Sign in to continue your onboarding workspace.</p>
 
-          <div className="auth-role-chips" role="group" aria-label="Demo role presets">
-            {(["HR Administrator", "Manager", "New Employee"] as const).map((r) => (
-              <button
-                type="button"
-                key={r}
-                className={`auth-role-chip ${role === r ? "active" : ""}`}
-                onClick={() => handleRoleChange(r)}
-              >
-                {r === "HR Administrator" ? (
-                  <ShieldCheck size={14} />
-                ) : r === "Manager" ? (
-                  <Users size={14} />
-                ) : (
-                  <UserRound size={14} />
-                )}
-                <span>{r === "HR Administrator" ? "HR Admin" : r}</span>
-                {role === r && <Check size={12} />}
-              </button>
-            ))}
-          </div>
-
-          {(error || sessionError) && (
+          {(displaySsoError || sessionError) && (
             <div className="auth-error-box" role="alert">
               <AlertTriangle size={15} />
-              <span>{error || sessionError}</span>
+              <span>{displaySsoError || sessionError}</span>
             </div>
           )}
-
-          <form onSubmit={submit} noValidate>
-            <div className="auth-field-group">
-              <label className="auth-label" htmlFor="login-email">
-                Work email
-              </label>
-              <div className="auth-input-wrapper">
-                <input
-                  id="login-email"
-                  className="auth-input"
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  required
-                />
-              </div>
+          {signingOut && (
+            <div className="auth-notice-box" role="status">
+              Finishing sign out securely…
             </div>
-
-            <div className="auth-field-group">
-              <div className="auth-field-header">
-                <label className="auth-label" htmlFor="login-password">
-                  Password
-                </label>
-                <Link to="/forgot-password" className="auth-forgot-btn">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="auth-input-wrapper">
-                <input
-                  id="login-password"
-                  className="auth-input"
-                  type={show ? "text" : "password"}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  required
-                />
-                <button
-                  type="button"
-                  className="auth-eye-btn"
-                  onClick={() => setShow(!show)}
-                  aria-label={show ? "Hide password" : "Show password"}
-                >
-                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
+          )}
+          {signedOut && !ssoError && !signingOut && (
+            <div className="auth-notice-box" role="status">
+              You’re signed out. Sign in again whenever you’re ready.
             </div>
-
-            <label className="auth-checkbox-row">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-              />
-              <span>Keep me signed in on this device</span>
-            </label>
-
-            <button className="auth-submit-btn" type="submit" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
-            </button>
-
-            <button
-              className="auth-submit-btn"
-              type="button"
-              onClick={() => api.auth.oidcStart()}
-            >
-              Continue with organization SSO
-            </button>
-
-            <p className="auth-sso-note" role="note">
-              Organization SSO is used for deployment. Demo credentials above are for local development only.
-            </p>
-
-            <div className="auth-switch-prompt">
-              New employee? Ask HR for an invitation.
+          )}
+          {ssoSuccess && (loading || !user) && !ssoError && (
+            <div className="auth-notice-box" role="status">
+              Signing in succeeded. Loading your workspace…
             </div>
-          </form>
+          )}
+          {user && !loading ? (
+            <div className="loading" role="status">Opening your workspace…</div>
+          ) : (
+            <>
+              <button
+                className="auth-submit-btn"
+                type="button"
+                onClick={() => {
+                  setStartingSso(true);
+                  api.auth.oidcStart();
+                }}
+                disabled={loading || startingSso || signingOut}
+                aria-busy={startingSso}
+              >
+                {startingSso ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck size={18} />
+                )}
+                {startingSso ? "Connecting to Keycloak…" : "Continue with Organization SSO (Keycloak)"}
+              </button>
+              <p className="auth-sso-note" role="note">
+                Your workspace and permissions come from your organization account.
+              </p>
+              <div className="auth-switch-prompt">
+                New employee? Ask HR for an invitation link.
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
 export function Signup() {
   const { acceptInvite: signUp, error: sessionError } = useSession();
   const navigate = useNavigate();
-  const [fullName, setFullName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
+  const location = useLocation();
+  const token = new URLSearchParams(location.search).get("token");
+
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -596,8 +464,12 @@ export function Signup() {
 
   async function handleSignup(e: FormEvent) {
     e.preventDefault();
+    if (!token) {
+      setError("An invitation token is required. Open the invitation link sent by HR.");
+      return;
+    }
     if (!agreeTerms) {
-      setError("Please agree to the terms to continue.");
+      setError("Please agree to the policies to continue.");
       return;
     }
     if (password.length < 12 || password.length > 128 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
@@ -611,12 +483,10 @@ export function Signup() {
     setBusy(true);
     setError("");
     try {
-      const inviteToken = new URLSearchParams(window.location.search).get("token");
-      if (!inviteToken) throw new Error("Open the invitation link sent by HR to create your account.");
-      const u = await signUp(inviteToken, password);
+      const u = await signUp(token, password);
       navigate(homeFor(u), { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.validationMessage : err instanceof Error ? err.message : "Failed to create account. Please try again.");
+      setError(err instanceof ApiError ? err.validationMessage : err instanceof Error ? err.message : "Failed to activate account. The invitation may be invalid or expired.");
     } finally {
       setBusy(false);
     }
@@ -635,11 +505,13 @@ export function Signup() {
           <div className="auth-mobile-brand">
             <BrandMark />
           </div>
-          <h1 className="auth-heading">Create your CLYORA account</h1>
+          <h1 className="auth-heading">
+            {token ? "Activate your portal account" : "Invitation Required"}
+          </h1>
           <p className="auth-subheading">
-            Your CLYORA email determines your workspace: <strong>username.hr@clyora</strong>
-            {" "}for HR, <strong>username.manager@clyora</strong> for managers, and
-            {" "}<strong>username@clyora</strong> for employees.
+            {token
+              ? "Set your account password to activate your onboarding portal access."
+              : "Self-service registration is disabled. You must open the invitation link provided by your HR administrator, or sign in using Keycloak SSO."}
           </p>
 
           {(error || sessionError) && (
@@ -649,114 +521,89 @@ export function Signup() {
             </div>
           )}
 
-          <form onSubmit={handleSignup}>
-            <div className="auth-field-group">
-              <label className="auth-label" htmlFor="signup-name">
-                Full name
-              </label>
-              <input
-                id="signup-name"
-                className="auth-input"
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Alex Morgan"
-                required
-              />
-            </div>
-            <div className="auth-field-group">
-              <label className="auth-label" htmlFor="signup-company">
-                Company
-              </label>
-              <input
-                id="signup-company"
-                className="auth-input"
-                type="text"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="Acme Corp"
-              />
-            </div>
-            <div className="auth-field-group">
-              <label className="auth-label" htmlFor="signup-email">
-                Work email
-              </label>
-              <input
-                id="signup-email"
-                className="auth-input"
-                type="text"
-                autoComplete="email"
-                inputMode="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="alex.hr@clyora"
-                required
-              />
-            </div>
-            <div className="auth-field-group">
-              <label className="auth-label" htmlFor="signup-password">
-                Password
-              </label>
-              <div className="auth-input-wrapper">
+          {token ? (
+            <form onSubmit={handleSignup}>
+              <div className="auth-field-group">
+                <label className="auth-label" htmlFor="signup-password">
+                  New Password
+                </label>
+                <div className="auth-input-wrapper">
+                  <input
+                    id="signup-password"
+                    className="auth-input"
+                    type={show ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="12–128 characters, with upper/lowercase and a number"
+                    minLength={12}
+                    maxLength={128}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="auth-eye-btn"
+                    onClick={() => setShow(!show)}
+                    aria-label={show ? "Hide password" : "Show password"}
+                  >
+                    {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="auth-field-hint">
+                  Use 12–128 characters, including uppercase, lowercase, and a number.
+                </p>
+              </div>
+              <div className="auth-field-group">
+                <label className="auth-label" htmlFor="signup-confirm">
+                  Confirm Password
+                </label>
                 <input
-                  id="signup-password"
+                  id="signup-confirm"
                   className="auth-input"
                   type={show ? "text" : "password"}
                   autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="12–128 characters, with upper/lowercase and a number"
-                  minLength={12}
-                  maxLength={128}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Re-enter password"
                   required
                 />
-                <button
-                  type="button"
-                  className="auth-eye-btn"
-                  onClick={() => setShow(!show)}
-                  aria-label={show ? "Hide password" : "Show password"}
-                >
-                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
               </div>
-              <p className="auth-field-hint">
-                Use 12–128 characters, including uppercase, lowercase, and a number.
-              </p>
-            </div>
-            <div className="auth-field-group">
-              <label className="auth-label" htmlFor="signup-confirm">
-                Confirm password
+              <label className="auth-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={agreeTerms}
+                  onChange={(e) => setAgreeTerms(e.target.checked)}
+                  required
+                />
+                <span>
+                  I agree to use CLYORA in accordance with my organization’s policies.
+                </span>
               </label>
-              <input
-                id="signup-confirm"
-                className="auth-input"
-                type={show ? "text" : "password"}
-                autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Re-enter password"
-                required
-              />
+              <button className="auth-submit-btn" type="submit" disabled={busy}>
+                {busy ? "Activating account…" : "Activate and Sign In"}
+              </button>
+              <div className="auth-switch-prompt">
+                Already active? <Link to="/login">Sign in</Link>
+              </div>
+            </form>
+          ) : (
+            <div style={{ marginTop: "1.5rem" }}>
+              <Link
+                to="/login"
+                className="button primary"
+                style={{
+                  display: "block",
+                  textAlign: "center",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                }}
+              >
+                Go to Sign In
+              </Link>
             </div>
-            <label className="auth-checkbox-row">
-              <input
-                type="checkbox"
-                checked={agreeTerms}
-                onChange={(e) => setAgreeTerms(e.target.checked)}
-                required
-              />
-              <span>
-                I agree to use CLYORA in accordance with my organization’s
-                policies.
-              </span>
-            </label>
-            <button className="auth-submit-btn" type="submit" disabled={busy}>
-              {busy ? "Creating account…" : "Create account"}
-            </button>
-            <div className="auth-switch-prompt">
-              Already have an account? <Link to="/login">Sign in</Link>
-            </div>
-          </form>
+          )}
         </div>
       </div>
     </div>

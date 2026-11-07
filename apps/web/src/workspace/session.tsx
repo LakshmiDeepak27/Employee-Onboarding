@@ -12,14 +12,15 @@ import { api, restoreSession, setAccessToken } from "../lib/api";
 const Context = createContext<{
   user: AuthUser | null;
   loading: boolean;
+  signingOut: boolean;
   error: string;
-  signIn: (email: string, password: string) => Promise<AuthUser>;
   acceptInvite: (token: string, password: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
 }>(null!);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState("");
   const cache = useQueryClient();
   useEffect(() => {
@@ -50,14 +51,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
+        signingOut,
         error,
-        signIn: async (email, password) => {
-          const result = await api.auth.login({ email, password });
-          cache.clear();
-          setAccessToken(result.accessToken);
-          setUser(result.user);
-          return result.user;
-        },
         acceptInvite: async (token, password) => {
           const result = await api.auth.acceptInvite(token, password);
           cache.clear();
@@ -66,10 +61,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return result.user;
         },
         signOut: async () => {
-          await api.auth.logout();
+          // Start revocation before clearing the token; the request helper reads
+          // it synchronously. Clear local state immediately for responsive UI.
+          setSigningOut(true);
+          const logoutRequest = api.auth.logout();
           setAccessToken(null);
           setUser(null);
           cache.clear();
+          try {
+            await logoutRequest;
+          } catch {
+            // Local sign-out still completes if the server cannot be reached.
+          } finally {
+            setSigningOut(false);
+          }
         },
       }}
     >

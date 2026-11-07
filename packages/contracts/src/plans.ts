@@ -278,6 +278,22 @@ export const ApprovePlanResponseSchema = z
   })
   .openapi("ApprovePlanResponse");
 
+export const FinalizeOnboardingRequestSchema = z
+  .object({
+    acknowledgement: z.literal(true),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .openapi("FinalizeOnboardingRequest");
+
+export const FinalizeOnboardingResponseSchema = z
+  .object({
+    planId: Uuid,
+    status: PlanStatusEnum,
+    completedAt: IsoDateTime,
+    completedBy: z.string(),
+  })
+  .openapi("FinalizeOnboardingResponse");
+
 /** 409 body when V7 blocks approval. */
 export const ApprovalBlockedDetailSchema = z
   .object({

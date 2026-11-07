@@ -46,6 +46,8 @@ import {
   PlanTaskSchema,
   ApprovePlanRequestSchema,
   ApprovePlanResponseSchema,
+  FinalizeOnboardingRequestSchema,
+  FinalizeOnboardingResponseSchema,
   FindingListResponseSchema,
   AuditListResponseSchema,
   EscalationSchema,
@@ -68,10 +70,6 @@ import {
   PayrollSetupSchema,
   UpsertPayrollSetupRequestSchema,
   VerifyPayrollRequestSchema,
-  BenefitEnrollmentSchema,
-  BenefitEnrollmentListResponseSchema,
-  ElectBenefitRequestSchema,
-  BenefitPlanSchema,
   TrainingAssignmentSchema,
   TrainingAssignmentListResponseSchema,
   CreateTrainingAssignmentRequestSchema,
@@ -80,6 +78,12 @@ import {
   ManagerTaskSchema,
   UpsertManagerTaskRequestSchema,
 } from "./services.js";
+import {
+  BenefitEnrollmentSchema,
+  BenefitEnrollmentListResponseSchema,
+  ElectBenefitRequestSchema,
+  BenefitPlanSchema,
+} from "./benefits.js";
 import {
   PolicyDocumentListResponseSchema,
   ListPoliciesQuerySchema,
@@ -319,7 +323,7 @@ registry.registerPath({
     },
   },
   responses: {
-    201: json(InviteEmployeeResponseSchema, "Invited."),
+    202: json(InviteEmployeeResponseSchema, "Activation email queued by Keycloak."),
     403: RESP[403],
     404: RESP[404],
     409: err("Already has an active account."),
@@ -501,6 +505,23 @@ registry.registerPath({
     403: RESP[403],
     404: RESP[404],
     409: err("APPROVAL_BLOCKED. `error.fields` names the blocking tasks."),
+  },
+});
+registry.registerPath({
+  method: "post",
+  path: "/api/v1/plans/{id}/completion-approval",
+  tags: ["Plans"],
+  security: SECURITY,
+  summary: "Record final HR sign-off for a completed onboarding",
+  request: {
+    params: idParam,
+    body: { content: { "application/json": { schema: FinalizeOnboardingRequestSchema } } },
+  },
+  responses: {
+    200: json(FinalizeOnboardingResponseSchema, "Onboarding finalized."),
+    403: RESP[403],
+    404: RESP[404],
+    409: err("The onboarding is not ready for final approval."),
   },
 });
 // TASKS

@@ -13,11 +13,11 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS !== "true")(
       // 1. Login
       const loginRes = await request(app)
         .post("/api/v1/auth/login")
-        .send({ email: "hr.admin@demo.io", password: "Onboard!ng2026" });
+        .send({ email: "asha.hr@clyora", password: "Onboard!ng2026" });
 
       expect(loginRes.status).toBe(200);
       expect(loginRes.body.accessToken).toBeDefined();
-      expect(loginRes.body.user.email).toBe("hr.admin@demo.io");
+      expect(loginRes.body.user.email).toBe("asha.hr@clyora");
 
       const token = loginRes.body.accessToken;
 

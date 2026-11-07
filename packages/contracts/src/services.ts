@@ -160,8 +160,12 @@ export const UpsertPayrollSetupRequestSchema = z
     payFrequency: z
       .enum(["WEEKLY", "BIWEEKLY", "SEMIMONTHLY", "MONTHLY"])
       .optional(),
-    salaryCurrency: z.string().length(3).toUpperCase().optional(),
-    taxFormType: z.string().max(40).optional(),
+    salaryCurrency: z
+      .string()
+      .regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code")
+      .toUpperCase()
+      .optional(),
+    taxFormType: z.string().trim().min(1).max(40).optional(),
     taxFormReceived: z.boolean().optional(),
     /** Write-only. Only the last four digits are persisted. */
     bankAccountNumber: z
@@ -174,7 +178,11 @@ export const UpsertPayrollSetupRequestSchema = z
     /** Write-only. Only the last four digits are persisted. */
     nationalId: z
       .string()
-      .min(4)
+      .trim()
+      .min(
+        5,
+        "must contain more than four characters so the stored suffix is not the full identifier",
+      )
       .max(32)
       .optional()
       .openapi({
@@ -195,51 +203,22 @@ export const VerifyPayrollRequestSchema = z
     notes: z.string().max(500).optional(),
   })
   .openapi("VerifyPayrollRequest");
+
+// ===========================================================================
 // 4. BENEFITS (HR)
-
-export const BenefitPlanSchema = z
-  .object({
-    id: Uuid,
-    code: z.string().openapi({ example: "CA-MED-STD" }),
-    name: z.string(),
-    type: BenefitTypeEnum,
-    jurisdictionCode: JurisdictionCode.nullable(),
-    enrollmentWindowDays: z.number().int(),
-    isAutoEnrol: z.boolean().openapi({
-      description:
-        "True for statutory auto-enrolment schemes such as UK pension.",
-    }),
-    description: z.string().nullable(),
-  })
-  .openapi("BenefitPlan");
-
-export const BenefitEnrollmentSchema = z
-  .object({
-    id: Uuid,
-    taskId: Uuid,
-    benefitPlan: BenefitPlanSchema,
-    status: BenefitEnrollmentStatusEnum,
-    windowOpensOn: IsoDate,
-    windowClosesOn: IsoDate.openapi({
-      description:
-        "Computed by the deadline engine. Missing this window has real consequences.",
-    }),
-    daysRemaining: z.number().int(),
-    electedAt: IsoDateTime.nullable(),
-    waived: z.boolean(),
-    dependentsCount: z.number().int(),
-    notes: z.string().nullable(),
-  })
-  .openapi("BenefitEnrollment");
-
+// ===========================================================================
+// Compatibility request for the existing plan-task workflow endpoint.
 export const ElectBenefitRequestSchema = z
   .object({
     decision: z.enum(["ELECT", "WAIVE"]),
     dependentsCount: z.number().int().min(0).max(20).default(0),
     notes: z.string().max(500).optional(),
   })
-  .openapi("ElectBenefitRequest");
+  .openapi("TaskBenefitDecisionRequest");
+
+// ===========================================================================
 // 5. TRAINING (L&D)
+// ===========================================================================
 
 export const TrainingCourseSchema = z
   .object({
@@ -322,6 +301,46 @@ export const UpsertManagerTaskRequestSchema = z
     message: "at least one field is required",
   })
   .openapi("UpsertManagerTaskRequest");
+
+export const MANAGER_ACTION_TYPES = [
+  "ASSIGN_BUDDY",
+  "PREPARE_DAY_ONE_AGENDA",
+  "SCHEDULE_INTRO_MEETINGS",
+  "APPROVE_SYSTEM_ACCESS",
+  "SET_PROBATION_GOALS",
+] as const;
+
+export type ManagerActionType = (typeof MANAGER_ACTION_TYPES)[number];
+
+export const ManagerPrioritySchema = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]);
+export type ManagerPriority = z.infer<typeof ManagerPrioritySchema>;
+
+export const ManagerTimingSchema = z.enum([
+  "BEFORE_START_DATE",
+  "DAY_ONE",
+  "FIRST_WEEK",
+  "FIRST_30_DAYS",
+]);
+export type ManagerTiming = z.infer<typeof ManagerTimingSchema>;
+
+export const ManagerActionRecommendationSchema = z.object({
+  taskType: z.enum(MANAGER_ACTION_TYPES),
+  action: z.string().min(1).max(500),
+  reasoning: z.string().min(1).max(1000),
+  priority: ManagerPrioritySchema,
+  suggestedTiming: ManagerTimingSchema,
+  dependencies: z.array(z.enum(MANAGER_ACTION_TYPES)),
+  blockers: z.array(z.string().min(1).max(500)),
+  requiresHumanReview: z.boolean(),
+});
+export type ManagerActionRecommendation = z.infer<typeof ManagerActionRecommendationSchema>;
+
+export const ManagingAgentOutputSchema = z.object({
+  recommendations: z.array(ManagerActionRecommendationSchema),
+  requiresHumanReview: z.boolean(),
+  reviewReason: z.string().max(1000).nullable(),
+});
+export type ManagingAgentOutput = z.infer<typeof ManagingAgentOutputSchema>;
 // List envelopes
 
 export const DocumentRequestListResponseSchema = paginated(
@@ -331,10 +350,6 @@ export const DocumentRequestListResponseSchema = paginated(
 export const EquipmentAssignmentListResponseSchema = paginated(
   EquipmentAssignmentSchema,
   "EquipmentAssignmentListResponse",
-);
-export const BenefitEnrollmentListResponseSchema = paginated(
-  BenefitEnrollmentSchema,
-  "BenefitEnrollmentListResponse",
 );
 export const TrainingAssignmentListResponseSchema = paginated(
   TrainingAssignmentSchema,

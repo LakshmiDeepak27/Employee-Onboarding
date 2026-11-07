@@ -9,6 +9,7 @@ import {
   RoleKeyEnum,
   PermissionScopeEnum,
   Email,
+  IdentityEmail,
   PaginationQuery,
   paginated,
 } from "./common.js";
@@ -27,7 +28,7 @@ export const PolicyDocumentSchema = z
     effectiveFrom: IsoDate,
     isMock: z.boolean().openapi({
       description:
-        "TRUE for every document in this challenge. These are author-written demonstration policies, not legal guidance.",
+        "True only for demonstration content; production policy sources are explicitly entered and approved by the organization.",
     }),
     clauseCount: z.number().int(),
   })
@@ -64,6 +65,26 @@ export const ListPoliciesQuerySchema = PaginationQuery.extend({
   search: z.string().max(200).optional(),
 }).openapi("ListPoliciesQuery");
 
+export const CreatePolicyDocumentRequestSchema = z
+  .object({
+    jurisdictionCode: JurisdictionCode.nullable(),
+    title: z.string().trim().min(3).max(200),
+    category: z.string().trim().min(2).max(60),
+    sourceUri: z.string().url().max(1000),
+    version: z.string().trim().min(1).max(40),
+    effectiveFrom: IsoDate,
+    clauses: z.array(z.object({
+      id: ClauseId,
+      jurisdictionCode: JurisdictionCode.nullable(),
+      heading: z.string().trim().max(200).nullable(),
+      body: z.string().trim().min(30).max(20000),
+      topics: z.array(z.string().trim().min(2).max(60)).max(20).default([]),
+    })).min(1).max(200),
+    confirmApprovedSource: z.literal(true),
+  })
+  .openapi("CreatePolicyDocumentRequest");
+export type CreatePolicyDocumentRequest = z.infer<typeof CreatePolicyDocumentRequestSchema>;
+
 /**
  * GET /api/v1/policies/coverage
  * Which jurisdictions we actually hold an approved corpus for. The UI uses
@@ -76,7 +97,7 @@ export const PolicyCoverageSchema = z
     documentCount: z.number().int(),
     clauseCount: z.number().int(),
     categories: z.array(z.string()),
-    /** False -> plan generation will refuse and raise an escalation. */
+    /** False means jurisdiction-specific policy tasks are unavailable; a limited operational plan can still be created. */
     isSupported: z.boolean(),
   })
   .openapi("PolicyCoverage");
@@ -103,7 +124,7 @@ export const RoleSchema = z
 export const AdminUserSchema = z
   .object({
     id: Uuid,
-    email: Email,
+    email: IdentityEmail,
     status: UserStatusEnum,
     mustChangePassword: z.boolean(),
     employeeId: Uuid.nullable(),
@@ -117,7 +138,7 @@ export const AdminUserSchema = z
 
 export const CreateUserRequestSchema = z
   .object({
-    email: Email,
+    email: IdentityEmail,
     roles: z.array(RoleKeyEnum).min(1),
     employeeId: Uuid.optional(),
     /** Omit to create an INVITED account with no password. */

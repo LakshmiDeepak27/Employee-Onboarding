@@ -10,12 +10,12 @@
     "start": "node dist/index.js",
     "openapi": "tsx src/scripts/emit-openapi.ts",
     "openapi:check": "tsx src/scripts/emit-openapi.ts --check",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:deploy": "prisma migrate deploy"
+    "db:generate": "node scripts/with-root-env.cjs prisma generate",
+    "db:push": "node scripts/with-root-env.cjs prisma db push",
+    "db:migrate": "node scripts/with-root-env.cjs prisma migrate dev",
+    "db:studio": "node scripts/with-root-env.cjs prisma studio",
+    "db:seed": "node scripts/with-root-env.cjs tsx prisma/seed.ts",
+    "db:deploy": "node scripts/with-root-env.cjs prisma migrate deploy"
   },
   "dependencies": {
     "@eo/contracts": "*",
@@ -24,6 +24,7 @@
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",

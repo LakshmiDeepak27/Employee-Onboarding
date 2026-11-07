@@ -244,7 +244,7 @@ export function ServicePage({ service }: { service: Service }) {
                             }
                           >
                             <Download size={14} />
-                            Download
+                            {action.isPending && action.variables?.row.id === row.id && action.variables.action === "download" ? "Downloading…" : "Download"}
                           </button>
                         )}
                         {can(user, "document.upload") &&
@@ -253,7 +253,7 @@ export function ServicePage({ service }: { service: Service }) {
                           ) && (
                             <label className="button secondary small upload-label">
                               <Upload size={14} />
-                              Choose file
+                              {action.isPending && action.variables?.row.id === row.id && action.variables.action === "upload" ? "Uploading…" : "Choose file"}
                               <input
                                 type="file"
                                 aria-label={`Upload ${row.documentType}`}
@@ -281,7 +281,7 @@ export function ServicePage({ service }: { service: Service }) {
                                 action.mutate({ row, action: "verify" })
                               }
                             >
-                              Verify
+                              {action.isPending && action.variables?.row.id === row.id && action.variables.action === "verify" ? "Verifying…" : "Verify"}
                             </button>
                           )}
                       </>
@@ -296,7 +296,7 @@ export function ServicePage({ service }: { service: Service }) {
                             action.mutate({ row, action: "training" })
                           }
                         >
-                          Confirm completed
+                          {action.isPending && action.variables?.row.id === row.id ? "Saving…" : "Confirm completed"}
                         </button>
                       )}
                     {service === "manager" &&
@@ -309,7 +309,7 @@ export function ServicePage({ service }: { service: Service }) {
                             action.mutate({ row, action: "manager" })
                           }
                         >
-                          Mark completed
+                          {action.isPending && action.variables?.row.id === row.id ? "Saving…" : "Mark completed"}
                         </button>
                       )}
                     {service === "benefits" &&
@@ -323,7 +323,7 @@ export function ServicePage({ service }: { service: Service }) {
                               disabled={action.isPending}
                               onClick={() => action.mutate({ row, action: a })}
                             >
-                              {human(a)}
+                              {action.isPending && action.variables?.row.id === row.id && action.variables.action === a ? "Saving…" : human(a)}
                             </button>
                           ))}
                         </>
@@ -348,7 +348,7 @@ export function ServicePage({ service }: { service: Service }) {
                             })
                           }
                         >
-                          {row.status === "REQUESTED"
+                          {action.isPending && action.variables?.row.id === row.id ? "Updating…" : row.status === "REQUESTED"
                             ? "Mark ordered"
                             : row.status === "ORDERED"
                               ? "Mark shipped"
@@ -404,7 +404,43 @@ export function Departments() {
   );
 }
 export function Policies({ assistant = false }: { assistant?: boolean }) {
+  const { user } = useSession();
+  const cache = useQueryClient();
   const [params, setParams] = useSearchParams();
+  const [docTitle, setDocTitle] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("IN-KA");
+  const [category, setCategory] = useState("onboarding");
+  const [sourceUri, setSourceUri] = useState("");
+  const [version, setVersion] = useState("1.0");
+  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [clauseId, setClauseId] = useState("");
+  const [clauseHeading, setClauseHeading] = useState("");
+  const [clauseBody, setClauseBody] = useState("");
+  const [topics, setTopics] = useState("");
+  const [confirmedSource, setConfirmedSource] = useState(false);
+  const createPolicy = useMutation({
+    mutationFn: () => api.policies.create({
+      jurisdictionCode: jurisdiction || null,
+      title: docTitle,
+      category,
+      sourceUri,
+      version,
+      effectiveFrom,
+      clauses: [{
+        id: clauseId,
+        jurisdictionCode: jurisdiction || null,
+        heading: clauseHeading || null,
+        body: clauseBody,
+        topics: topics.split(",").map((topic) => topic.trim()).filter(Boolean),
+      }],
+      confirmApprovedSource: true,
+    }),
+    onSuccess: async () => {
+      await cache.invalidateQueries({ queryKey: ["policies"] });
+      setDocTitle(""); setSourceUri(""); setClauseId(""); setClauseHeading("");
+      setClauseBody(""); setTopics(""); setConfirmedSource(false);
+    },
+  });
   const q = useQuery({
     queryKey: ["policies", params.toString()],
     queryFn: () =>
@@ -426,8 +462,26 @@ export function Policies({ assistant = false }: { assistant?: boolean }) {
       />
       <div className="notice">
         <ShieldCheck size={18} />
-        Demo policy documents are author-written examples, not legal guidance.
+        Policy grounded tasks require HR approved source documents. Until those are added, orchestration generates only a limited internal setup checklist and does not invent local legal, payroll, or benefits requirements.
       </div>
+      {!assistant && can(user, "policy.write") && (
+        <Panel title="Add an approved policy source" description="Enter a real organization or official source and one clause. This source will be available to the onboarding plan agents.">
+          <form className="form-grid" onSubmit={(event) => { event.preventDefault(); if (confirmedSource) createPolicy.mutate(); }}>
+            <label>Document title<input required minLength={3} value={docTitle} onChange={(e) => setDocTitle(e.target.value)} /></label>
+            <label>Jurisdiction code<input required value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value.toUpperCase())} placeholder="IN-KA or US-CA" /></label>
+            <label>Category<input required value={category} onChange={(e) => setCategory(e.target.value)} /></label>
+            <label>Official source URL<input required type="url" value={sourceUri} onChange={(e) => setSourceUri(e.target.value)} /></label>
+            <label>Version<input required value={version} onChange={(e) => setVersion(e.target.value)} /></label>
+            <label>Effective from<input required type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></label>
+            <label>Clause ID<input required value={clauseId} onChange={(e) => setClauseId(e.target.value)} placeholder="ORG-HR-001" /></label>
+            <label>Clause heading<input value={clauseHeading} onChange={(e) => setClauseHeading(e.target.value)} /></label>
+            <label className="form-grid-full">Clause text<textarea required minLength={30} rows={5} value={clauseBody} onChange={(e) => setClauseBody(e.target.value)} /></label>
+            <label>Topics, comma separated<input value={topics} onChange={(e) => setTopics(e.target.value)} placeholder="equipment, first day" /></label>
+            <label className="form-grid-full checkbox-label"><input type="checkbox" checked={confirmedSource} onChange={(e) => setConfirmedSource(e.target.checked)} /> I confirm this is an approved, current source for our organization or jurisdiction.</label>
+            <div className="form-grid-full"><Feedback error={createPolicy.error} success={createPolicy.isSuccess ? "Approved source added." : undefined} /><button className="primary-button" disabled={!confirmedSource || createPolicy.isPending}>{createPolicy.isPending ? "Saving source…" : "Add policy source"}</button></div>
+          </form>
+        </Panel>
+      )}
       <section className="panel">
         <div className="toolbar">
           <label className="search-box">
@@ -663,7 +717,7 @@ export function Settings() {
           title="Change password"
           description="Changing your password revokes your existing sessions."
         >
-          <form className="panel-body" onSubmit={submit}>
+          <form className="panel-body form-vertical" onSubmit={submit}>
             <label>
               Current password
               <input
@@ -689,8 +743,8 @@ export function Settings() {
                 Sign in again
               </Link>
             ) : (
-              <button className="button primary" disabled={change.isPending}>
-                Update password
+            <button className="button primary" disabled={change.isPending}>
+              {change.isPending ? "Updating password…" : "Update password"}
               </button>
             )}
           </form>
@@ -883,7 +937,7 @@ export function Payroll() {
                   }
                 />
                 <button className="button secondary" disabled={save.isPending}>
-                  Save payroll details
+                  {save.isPending ? "Saving payroll details…" : "Save payroll details"}
                 </button>
               </form>
               <hr />
@@ -907,7 +961,7 @@ export function Payroll() {
                 }
                 onClick={() => verify.mutate()}
               >
-                Verify payroll
+                {verify.isPending ? "Verifying payroll…" : "Verify payroll"}
               </button>
             </div>
           </QueryState>

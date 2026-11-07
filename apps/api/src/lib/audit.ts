@@ -33,10 +33,30 @@ export async function writeAudit(
     createdAt: new Date(),
   };
 
+  if (tx) {
+    await tx.auditEvent.create({
+      data: {
+        actorUserId: auditEntry.actorUserId,
+        actorRole: auditEntry.actorRole,
+        action: auditEntry.action,
+        resourceType: auditEntry.resourceType,
+        resourceId: auditEntry.resourceId,
+        before: (input.before ?? undefined) as
+          Prisma.InputJsonValue | undefined,
+        after: (input.after ?? undefined) as
+          Prisma.InputJsonValue | undefined,
+        reason: auditEntry.reason,
+        ipAddress: auditEntry.ipAddress,
+        userAgent: auditEntry.userAgent,
+        requestId: auditEntry.requestId,
+      },
+    });
+    return;
+  }
+
   if (isDatabaseOnline()) {
     try {
-      const client = tx ?? prisma;
-      await client.auditEvent.create({
+      await prisma.auditEvent.create({
         data: {
           actorUserId: auditEntry.actorUserId,
           actorRole: auditEntry.actorRole,

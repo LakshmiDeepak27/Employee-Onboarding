@@ -25,6 +25,10 @@ import { policiesRouter, clausesRouter } from "./routes/policies.js";
 import { escalationsRouter } from "./routes/escalations.js";
 import { workflowRouter } from "./routes/workflowServices.js";
 import { chatRouter } from "./routes/chat.js";
+import { payrollRouter } from "./routes/payroll.js";
+import { managingRouter } from "./routes/managing.js";
+import { benefitsRouter } from "./routes/benefits.js";
+import { trainingRouter } from "./routes/training.js";
 
 export function createApp() {
   const app = express();
@@ -104,7 +108,11 @@ export function createApp() {
   app.use("/api/v1/policies", policiesRouter);
   app.use("/api/v1/clauses", clausesRouter);
   app.use("/api/v1/escalations", escalationsRouter);
+  app.use("/api/v1", payrollRouter);
+  app.use("/api/v1", managingRouter);
   app.use("/api/v1", workflowRouter);
+  app.use("/api/v1", benefitsRouter);
+  app.use("/api/v1", trainingRouter);
   app.use("/api/v1", referenceRouter);
   app.use("/api/v1", chatRouter);
   const webDistPath = fs.existsSync(path.resolve(process.cwd(), "apps/web/dist"))

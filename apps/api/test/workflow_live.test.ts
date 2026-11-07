@@ -32,7 +32,7 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS !== "true")(
       expect(task).toBeTruthy();
       const login = await request(app)
         .post("/api/v1/auth/login")
-        .send({ email: "hr.admin@demo.io", password: "Onboard!ng2026" });
+        .send({ email: "asha.hr@clyora", password: "Onboard!ng2026" });
       expect(login.status).toBe(200);
       const token = login.body.accessToken;
       const file = Buffer.from(
@@ -63,7 +63,7 @@ describe.skipIf(process.env.RUN_DATABASE_TESTS !== "true")(
       ).toBe("COMPLETED");
       const employeeLogin = await request(app)
         .post("/api/v1/auth/login")
-        .send({ email: "priya@demo.io", password: "Onboard!ng2026" });
+        .send({ email: "priya@clyora", password: "Onboard!ng2026" });
       expect(employeeLogin.status).toBe(200);
       const employeeToken = employeeLogin.body.accessToken;
       const denied = await request(app)

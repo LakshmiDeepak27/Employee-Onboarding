@@ -2,6 +2,7 @@ import {
   z,
   Uuid,
   Email,
+  IdentityEmail,
   IsoDate,
   IsoDateTime,
   JurisdictionCode,
@@ -55,7 +56,7 @@ export const EmployeeSummarySchema = z
 
 export const EmployeeSchema = EmployeeSummarySchema.extend({
   userId: Uuid.nullable(),
-  workEmail: Email.nullable(),
+  workEmail: IdentityEmail.nullable(),
   personalEmail: Email,
   phone: z.string().nullable(),
   departmentId: Uuid.nullable(),
@@ -79,7 +80,7 @@ export const CreateEmployeeRequestSchema = z
     firstName: z.string().min(1).max(80),
     lastName: z.string().min(1).max(80),
     personalEmail: Email,
-    workEmail: Email.optional(),
+    workEmail: IdentityEmail.optional(),
     phone: z.string().max(32).optional(),
     jobTitle: z.string().min(1).max(120),
     roleFamily: z.string().min(1).max(60).openapi({ example: "engineering" }),
@@ -131,8 +132,8 @@ export const InviteEmployeeResponseSchema = z
   .object({
     userId: Uuid,
     email: Email,
-    /** Only returned when NODE_ENV !== 'production', so the demo can log in. */
-    inviteToken: z.string().nullable(),
+    username: z.string(),
+    activationEmailSent: z.boolean(),
     expiresAt: IsoDateTime,
   })
   .openapi("InviteEmployeeResponse");

@@ -313,145 +313,21 @@ export async function evaluateRules(
     }
   }
 
-  // 2. Supplement with built-in statutory baseline for any uncovered essential statutory task
+  // 2. Fill the non-legal operational floor only. Legal, payroll, benefits, and
+  // compliance obligations must come from approved organization policy/templates.
+  const safeOperationalTypes = new Set([
+    "PROVISION_LAPTOP",
+    "CREATE_SYSTEM_ACCOUNTS",
+    "PREPARE_DAY_ONE_AGENDA",
+    "ASSIGN_BUDDY",
+    "SCHEDULE_INTRO_MEETINGS",
+    "SET_PROBATION_GOALS",
+  ]);
   for (const b of BUILT_IN_STATUTORY_FLOOR) {
+    if (!safeOperationalTypes.has(b.taskType)) continue;
     if (!addedTypes.has(b.taskType)) {
       rules.push(b);
       addedTypes.add(b.taskType);
-    }
-  }
-
-  // 3. Conditional Rule: Benefits Election for Full Time / Part Time employees
-  if (
-    profile.employmentType === "FULL_TIME" ||
-    profile.employmentType === "PART_TIME"
-  ) {
-    if (!addedTypes.has("BENEFITS_ELECTION")) {
-      rules.push({
-        taskType: "BENEFITS_ELECTION",
-        service: "BENEFITS",
-        title: "Elect or Waive Group Benefit Coverage",
-        description:
-          "Complete enrolment window elections for medical, dental, life, and supplemental benefits.",
-        ownerRole: "HR",
-        authorityClass: "ROUTINE",
-        deadlineAnchor: "START_DATE",
-        deadlineOffsetDays: 30,
-        deadlineBasis: "BUSINESS_DAYS",
-        leadTimeDays: 0,
-        dependsOnTypes: [],
-        isMandatory: true,
-      });
-      addedTypes.add("BENEFITS_ELECTION");
-    }
-
-    // UK Statutory Pension Auto-Enrolment
-    if (
-      profile.jurisdictionCode === "GB" &&
-      !addedTypes.has("PENSION_AUTO_ENROLMENT")
-    ) {
-      rules.push({
-        taskType: "PENSION_AUTO_ENROLMENT",
-        service: "BENEFITS",
-        title: "Statutory Workplace Pension Auto-Enrolment Notice",
-        description:
-          "Issue UK statutory workplace pension enrolment notice and contribution postponement rules.",
-        ownerRole: "HR",
-        authorityClass: "LEGAL",
-        deadlineAnchor: "START_DATE",
-        deadlineOffsetDays: 30,
-        deadlineBasis: "BUSINESS_DAYS",
-        leadTimeDays: 0,
-        dependsOnTypes: [],
-        sourceClauseId: "GB-PEN-001",
-        isMandatory: true,
-      });
-      addedTypes.add("PENSION_AUTO_ENROLMENT");
-    }
-  }
-
-  // 4. Conditional Rule: Work Mode Equipment
-  if (
-    (profile.workMode === "ONSITE" || profile.workMode === "HYBRID") &&
-    !addedTypes.has("ISSUE_ACCESS_BADGE")
-  ) {
-    rules.push({
-      taskType: "ISSUE_ACCESS_BADGE",
-      service: "EQUIPMENT",
-      title: "Issue Facility Access Badge & Keycard",
-      description:
-        "Program electronic access badge for office location entry and parking facilities.",
-      ownerRole: "IT",
-      authorityClass: "ROUTINE",
-      deadlineAnchor: "START_DATE",
-      deadlineOffsetDays: 0,
-      deadlineBasis: "BUSINESS_DAYS",
-      leadTimeDays: 1,
-      dependsOnTypes: ["RIGHT_TO_WORK_CHECK"],
-      isMandatory: true,
-    });
-    addedTypes.add("ISSUE_ACCESS_BADGE");
-  }
-
-  if (
-    profile.workMode === "REMOTE" &&
-    !addedTypes.has("PROVISION_PERIPHERALS")
-  ) {
-    rules.push({
-      taskType: "PROVISION_PERIPHERALS",
-      service: "EQUIPMENT",
-      title: "Ship Remote Home-Office Hardware Bundle",
-      description:
-        "Ship external monitor, ergonomic keyboard, headset, and security peripherals to remote address.",
-      ownerRole: "IT",
-      authorityClass: "ROUTINE",
-      deadlineAnchor: "START_DATE",
-      deadlineOffsetDays: -1,
-      deadlineBasis: "BUSINESS_DAYS",
-      leadTimeDays: 4,
-      dependsOnTypes: ["PROVISION_LAPTOP"],
-      isMandatory: true,
-    });
-    addedTypes.add("PROVISION_PERIPHERALS");
-  }
-
-  // 5. Conditional Rule: Role Family specific requirements
-  if (profile.roleFamily.toLowerCase().includes("eng")) {
-    if (!addedTypes.has("GRANT_APPLICATION_ACCESS")) {
-      rules.push({
-        taskType: "GRANT_APPLICATION_ACCESS",
-        service: "EQUIPMENT",
-        title: "Grant Engineering GitHub & Cloud Infrastructure Access",
-        description:
-          "Assign role-based access for GitHub repositories, AWS dev environments, and CI/CD pipelines.",
-        ownerRole: "IT",
-        authorityClass: "ROUTINE",
-        deadlineAnchor: "START_DATE",
-        deadlineOffsetDays: 0,
-        deadlineBasis: "BUSINESS_DAYS",
-        leadTimeDays: 0,
-        dependsOnTypes: ["CREATE_SYSTEM_ACCOUNTS"],
-        isMandatory: true,
-      });
-      addedTypes.add("GRANT_APPLICATION_ACCESS");
-    }
-    if (!addedTypes.has("ROLE_SPECIFIC_TRAINING")) {
-      rules.push({
-        taskType: "ROLE_SPECIFIC_TRAINING",
-        service: "TRAINING",
-        title: "Complete Engineering Architecture & Security Overview",
-        description:
-          "Complete codebase walkthrough, SDLC standards, secret management and security posture training.",
-        ownerRole: "LND",
-        authorityClass: "ROUTINE",
-        deadlineAnchor: "START_DATE",
-        deadlineOffsetDays: 7,
-        deadlineBasis: "BUSINESS_DAYS",
-        leadTimeDays: 0,
-        dependsOnTypes: ["CREATE_SYSTEM_ACCOUNTS"],
-        isMandatory: true,
-      });
-      addedTypes.add("ROLE_SPECIFIC_TRAINING");
     }
   }
 
