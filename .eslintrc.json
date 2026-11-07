@@ -1,0 +1,13 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint"],
+  "extends": ["eslint:recommended"],
+  "env": { "node": true, "browser": true, "es2022": true },
+  "parserOptions": { "sourceType": "module", "ecmaFeatures": { "jsx": true } },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**"],
+  "rules": {
+    "no-unused-vars": "off",
+    "no-undef": "off"
+  }
+}

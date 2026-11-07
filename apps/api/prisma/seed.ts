@@ -1,15 +1,20 @@
 /**
- * Seeds reference data, the RBAC catalog and three demo accounts.
+ * Seeds only the access-control catalog by default.
  *
  * Idempotent: safe to run repeatedly. The RBAC section is the important part
  * — roles and permissions come from packages/contracts/src/rbac.ts, which is
  * the single source of truth. Change the catalog there, re-run this, done.
  *
- *   npm run db:seed
+ * Optional starter configuration and demo records are disabled by default.
  */
+import dotenv from 'dotenv';
+dotenv.config();
+dotenv.config({ path: '../../.env' });
+
 import bcrypt from 'bcryptjs';
 import { PrismaClient, type EmploymentType } from '@prisma/client';
 import { PERMISSIONS, ROLES } from '../../../packages/contracts/dist/rbac.js';
+import { policyService } from '../src/ai/policyService.js';
 
 const prisma = new PrismaClient();
 
@@ -92,8 +97,8 @@ async function seedJurisdictions() {
       timezone: 'Asia/Kolkata',
     },
     {
-      // Deliberately left WITHOUT a policy corpus so the refusal path can be
-      // demonstrated: generating a plan here must refuse and escalate.
+      // Deliberately left without a policy corpus so the safe internal-only
+      // onboarding fallback can be demonstrated.
       code: 'SG',
       displayName: 'Singapore',
       countryCode: 'SG',
@@ -195,14 +200,18 @@ async function seedCatalogs() {
   for (const c of courses) {
     await prisma.trainingCourse.upsert({ where: { code: c.code }, create: c, update: c });
   }
+
+  console.log('  policy documents and clauses...');
+  await policyService.ensureDemoCorpusSeeded();
 }
 
 /**
- * Three demo accounts, one per role, so the whole team can sign in and the
+ * Four demo accounts, one per application role, so the whole team can sign in and the
  * scope rules are visible immediately:
- *   hr.admin@demo.io  sees everything
- *   manager@demo.io   sees only priya (their direct report)
- *   priya@demo.io     sees only herself
+ *   asha.hr@clyora sees everything
+ *   it.admin@clyora sees equipment work only
+ *   david.manager@clyora sees only priya (their direct report)
+ *   priya@clyora sees only herself
  */
 async function seedDemoUsers() {
   console.log('  demo users and employees...');
@@ -223,9 +232,10 @@ async function seedDemoUsers() {
     return user;
   }
 
-  const hrUser = await makeUser('hr.admin@demo.io', 'hr_admin');
-  const mgrUser = await makeUser('manager@demo.io', 'manager');
-  const empUser = await makeUser('priya@demo.io', 'employee');
+  const hrUser = await makeUser('asha.hr@clyora', 'hr_admin');
+  const itUser = await makeUser('it.admin@clyora', 'it_admin');
+  const mgrUser = await makeUser('david.manager@clyora', 'manager');
+  const empUser = await makeUser('priya@clyora', 'employee');
 
   const eng = await prisma.department.findUniqueOrThrow({ where: { code: 'ENG' } });
 
@@ -240,6 +250,8 @@ async function seedDemoUsers() {
     employmentType: EmploymentType;
     startInDays: number;
     jobTitle: string;
+    roleFamily: string;
+    workMode: 'REMOTE' | 'ONSITE' | 'HYBRID';
   }) {
     return prisma.employee.upsert({
       where: { employeeNumber: input.employeeNumber },
@@ -249,17 +261,26 @@ async function seedDemoUsers() {
         lastName: input.lastName,
         personalEmail: input.personalEmail,
         jobTitle: input.jobTitle,
-        roleFamily: 'engineering',
+        roleFamily: input.roleFamily,
         departmentId: eng.id,
         jurisdictionCode: input.jurisdictionCode,
         employmentType: input.employmentType,
-        workMode: 'HYBRID',
+        workMode: input.workMode,
         startDate: daysFromNow(input.startInDays),
         status: 'ONBOARDING',
         ...(input.userId ? { userId: input.userId } : {}),
         ...(input.managerId ? { managerId: input.managerId } : {}),
       },
       update: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        personalEmail: input.personalEmail,
+        jobTitle: input.jobTitle,
+        roleFamily: input.roleFamily,
+        workMode: input.workMode,
+        jurisdictionCode: input.jurisdictionCode,
+        employmentType: input.employmentType,
+        status: 'ONBOARDING',
         ...(input.userId ? { userId: input.userId } : {}),
         ...(input.managerId ? { managerId: input.managerId } : {}),
         startDate: daysFromNow(input.startInDays),
@@ -271,24 +292,28 @@ async function seedDemoUsers() {
     employeeNumber: 'EMP-0001',
     firstName: 'Asha',
     lastName: 'Rao',
-    personalEmail: 'asha@demo.io',
+    personalEmail: 'asha@clyora.com',
     userId: hrUser.id,
     jurisdictionCode: 'IN-KA',
     employmentType: 'FULL_TIME',
     startInDays: -400,
     jobTitle: 'HR Lead',
+    roleFamily: 'people_operations',
+    workMode: 'HYBRID',
   });
 
   const mgrEmp = await makeEmployee({
     employeeNumber: 'EMP-0002',
     firstName: 'David',
     lastName: 'Chen',
-    personalEmail: 'david@demo.io',
+    personalEmail: 'david@clyora.com',
     userId: mgrUser.id,
     jurisdictionCode: 'CA-ON',
     employmentType: 'FULL_TIME',
     startInDays: -300,
     jobTitle: 'Engineering Manager',
+    roleFamily: 'engineering',
+    workMode: 'HYBRID',
   });
 
   // Priya reports to David. This pair is what proves REPORTS scope works.
@@ -296,13 +321,15 @@ async function seedDemoUsers() {
     employeeNumber: 'EMP-0003',
     firstName: 'Priya',
     lastName: 'Nair',
-    personalEmail: 'priya@demo.io',
+    personalEmail: 'priya@clyora.com',
     userId: empUser.id,
     managerId: mgrEmp.id,
     jurisdictionCode: 'CA-ON',
     employmentType: 'FULL_TIME',
     startInDays: 10,
     jobTitle: 'Software Engineer',
+    roleFamily: 'engineering',
+    workMode: 'HYBRID',
   });
 
   // Not David's report. Manager scope must NOT reach this one.
@@ -310,12 +337,14 @@ async function seedDemoUsers() {
     employeeNumber: 'EMP-0004',
     firstName: 'Tom',
     lastName: 'Webb',
-    personalEmail: 'tom@demo.io',
+    personalEmail: 'tom@clyora.com',
     managerId: hrEmp.id,
     jurisdictionCode: 'GB',
     employmentType: 'FULL_TIME',
     startInDays: 14,
     jobTitle: 'Software Engineer',
+    roleFamily: 'engineering',
+    workMode: 'ONSITE',
   });
 
   // Singapore contractor: no policy corpus, so plan generation must REFUSE.
@@ -323,21 +352,63 @@ async function seedDemoUsers() {
     employeeNumber: 'EMP-0005',
     firstName: 'Wei',
     lastName: 'Lim',
-    personalEmail: 'wei@demo.io',
+    personalEmail: 'wei@clyora.com',
     jurisdictionCode: 'SG',
     employmentType: 'CONTRACTOR',
     startInDays: 21,
     jobTitle: 'Contract Designer',
+    roleFamily: 'design',
+    workMode: 'REMOTE',
   });
+}
+
+/** Explicit one-time/bootstrap identity; role assignment is database-side. */
+async function seedBootstrapHr() {
+  const email = process.env.BOOTSTRAP_HR_EMAIL?.trim().toLowerCase();
+  if (!email) return;
+  if (!/^[a-z0-9][a-z0-9._-]*\.hr@clyora$/.test(email)) {
+    throw new Error('BOOTSTRAP_HR_EMAIL must use <username>.hr@clyora');
+  }
+  const hrRole = await prisma.role.findUniqueOrThrow({ where: { key: 'hr_admin' } });
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    include: { userRoles: { include: { role: true } } },
+  });
+  if (existing) {
+    if (!existing.userRoles.some((entry) => entry.role.key === 'hr_admin')) {
+      throw new Error(`Account ${email} already exists without hr_admin; refusing to elevate it during bootstrap`);
+    }
+    console.log(`  bootstrap HR account already provisioned: ${email}`);
+    return;
+  }
+  await prisma.user.create({
+    data: {
+      email,
+      status: 'INVITED',
+      mustChangePassword: false,
+      authProvider: 'oidc',
+      userRoles: { create: [{ roleId: hrRole.id }] },
+    },
+  });
+  console.log(`  provisioned initial HR OIDC account: ${email}`);
 }
 
 async function main() {
   console.log('\nSeeding Employee Onboarding database\n');
   await seedRbac();
-  await seedJurisdictions();
-  await seedDepartments();
-  await seedCatalogs();
-  await seedDemoUsers();
+  await seedBootstrapHr();
+  if (process.env.SEED_REFERENCE_DATA === 'true') {
+    await seedJurisdictions();
+    await seedDepartments();
+    await seedCatalogs();
+  } else {
+    console.log('  starter reference records skipped');
+  }
+  if (process.env.SEED_DEMO_DATA === 'true') {
+    await seedDemoUsers();
+  } else {
+    console.log('  demo accounts and sample employees skipped');
+  }
 
   const counts = {
     roles: await prisma.role.count(),
@@ -346,22 +417,12 @@ async function main() {
     users: await prisma.user.count(),
     employees: await prisma.employee.count(),
     jurisdictions: await prisma.jurisdiction.count(),
+    policyDocuments: await prisma.policyDocument.count(),
+    policyClauses: await prisma.policyClause.count(),
   };
 
   console.log('\nDone.');
   console.table(counts);
-  console.log(`
-Demo accounts (password for all three: ${DEMO_PASSWORD})
-
-  hr.admin@demo.io   hr_admin  ORG      sees all 5 employees
-  manager@demo.io    manager   REPORTS  sees only Priya (EMP-0003)
-  priya@demo.io      employee  SELF     sees only herself
-
-Try the scope rule:
-  1. sign in as manager@demo.io
-  2. GET /api/v1/employees          -> returns Priya only
-  3. GET /api/v1/employees/<Tom id> -> 404, not 403 (existence is not leaked)
-`);
 }
 
 main()

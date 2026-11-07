@@ -10,10 +10,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api",
+    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api && npm run build -w @eo/web",
+    "start": "node apps/api/dist/index.js",
     "dev": "npm run dev -w @eo/api",
+    "dev:api": "npm run dev -w @eo/api",
+    "dev:web": "npm run dev -w @eo/web",
     "typecheck": "tsc -b --pretty",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint apps packages --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
     "db:generate": "npm run db:generate -w @eo/api",
     "db:migrate": "npm run db:migrate -w @eo/api",
@@ -24,7 +27,10 @@
     "openapi:check": "npm run openapi:check -w @eo/api",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:check": "npm run db:check -w @eo/api"
+    "db:deploy": "npm run db:deploy -w @eo/api",
+    "auth:up": "docker update --restart unless-stopped eo-keycloak && docker start eo-keycloak || docker compose --profile local-identity up -d keycloak",
+    "auth:stop": "docker stop eo-keycloak || docker compose --profile local-identity stop keycloak",
+    "auth:logs": "docker logs -f eo-keycloak"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

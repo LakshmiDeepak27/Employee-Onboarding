@@ -9,32 +9,30 @@ import {
   RoleKeyEnum,
   PermissionScopeEnum,
   Email,
+  IdentityEmail,
   PaginationQuery,
   paginated,
-} from './common.js';
-
-// ===========================================================================
+} from "./common.js";
 // POLICY KNOWLEDGE BASE
-// ===========================================================================
 
 export const PolicyDocumentSchema = z
   .object({
     id: Uuid,
     jurisdictionCode: JurisdictionCode.nullable().openapi({
-      description: 'Null means the document applies globally.',
+      description: "Null means the document applies globally.",
     }),
     title: z.string(),
-    category: z.string().openapi({ example: 'payroll' }),
+    category: z.string().openapi({ example: "payroll" }),
     sourceUri: z.string(),
-    version: z.string().openapi({ example: '2026.1' }),
+    version: z.string().openapi({ example: "2026.1" }),
     effectiveFrom: IsoDate,
     isMock: z.boolean().openapi({
       description:
-        'TRUE for every document in this challenge. These are author-written demonstration policies, not legal guidance.',
+        "True only for demonstration content; production policy sources are explicitly entered and approved by the organization.",
     }),
     clauseCount: z.number().int(),
   })
-  .openapi('PolicyDocument');
+  .openapi("PolicyDocument");
 
 export const PolicyClauseSchema = z
   .object({
@@ -47,7 +45,7 @@ export const PolicyClauseSchema = z
     topics: z.array(z.string()),
     isMock: z.boolean(),
   })
-  .openapi('PolicyClause');
+  .openapi("PolicyClause");
 
 /**
  * GET /api/v1/clauses/{clauseId}
@@ -59,13 +57,33 @@ export const ResolveClauseResponseSchema = PolicyClauseSchema.extend({
   highlight: z
     .object({ start: z.number().int(), end: z.number().int() })
     .nullable(),
-}).openapi('ResolveClauseResponse');
+}).openapi("ResolveClauseResponse");
 
 export const ListPoliciesQuerySchema = PaginationQuery.extend({
   jurisdictionCode: JurisdictionCode.optional(),
   category: z.string().optional(),
   search: z.string().max(200).optional(),
-}).openapi('ListPoliciesQuery');
+}).openapi("ListPoliciesQuery");
+
+export const CreatePolicyDocumentRequestSchema = z
+  .object({
+    jurisdictionCode: JurisdictionCode.nullable(),
+    title: z.string().trim().min(3).max(200),
+    category: z.string().trim().min(2).max(60),
+    sourceUri: z.string().url().max(1000),
+    version: z.string().trim().min(1).max(40),
+    effectiveFrom: IsoDate,
+    clauses: z.array(z.object({
+      id: ClauseId,
+      jurisdictionCode: JurisdictionCode.nullable(),
+      heading: z.string().trim().max(200).nullable(),
+      body: z.string().trim().min(30).max(20000),
+      topics: z.array(z.string().trim().min(2).max(60)).max(20).default([]),
+    })).min(1).max(200),
+    confirmApprovedSource: z.literal(true),
+  })
+  .openapi("CreatePolicyDocumentRequest");
+export type CreatePolicyDocumentRequest = z.infer<typeof CreatePolicyDocumentRequestSchema>;
 
 /**
  * GET /api/v1/policies/coverage
@@ -79,19 +97,16 @@ export const PolicyCoverageSchema = z
     documentCount: z.number().int(),
     clauseCount: z.number().int(),
     categories: z.array(z.string()),
-    /** False -> plan generation will refuse and raise an escalation. */
+    /** False means jurisdiction-specific policy tasks are unavailable; a limited operational plan can still be created. */
     isSupported: z.boolean(),
   })
-  .openapi('PolicyCoverage');
+  .openapi("PolicyCoverage");
 
 export const PolicyDocumentListResponseSchema = paginated(
   PolicyDocumentSchema,
-  'PolicyDocumentListResponse',
+  "PolicyDocumentListResponse",
 );
-
-// ===========================================================================
 // ADMIN — users and roles
-// ===========================================================================
 
 export const RoleSchema = z
   .object({
@@ -104,12 +119,12 @@ export const RoleSchema = z
       z.object({ key: z.string(), scope: PermissionScopeEnum }),
     ),
   })
-  .openapi('Role');
+  .openapi("Role");
 
 export const AdminUserSchema = z
   .object({
     id: Uuid,
-    email: Email,
+    email: IdentityEmail,
     status: UserStatusEnum,
     mustChangePassword: z.boolean(),
     employeeId: Uuid.nullable(),
@@ -119,17 +134,17 @@ export const AdminUserSchema = z
     lockedUntil: IsoDateTime.nullable(),
     createdAt: IsoDateTime,
   })
-  .openapi('AdminUser');
+  .openapi("AdminUser");
 
 export const CreateUserRequestSchema = z
   .object({
-    email: Email,
+    email: IdentityEmail,
     roles: z.array(RoleKeyEnum).min(1),
     employeeId: Uuid.optional(),
     /** Omit to create an INVITED account with no password. */
     temporaryPassword: z.string().min(12).max(128).optional(),
   })
-  .openapi('CreateUserRequest');
+  .openapi("CreateUserRequest");
 
 export const UpdateUserRequestSchema = z
   .object({
@@ -138,29 +153,31 @@ export const UpdateUserRequestSchema = z
     forceLogout: z.boolean().optional(),
     unlock: z.boolean().optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' })
-  .openapi('UpdateUserRequest');
+  .refine((v) => Object.keys(v).length > 0, {
+    message: "at least one field is required",
+  })
+  .openapi("UpdateUserRequest");
 
 export const AssignRolesRequestSchema = z
   .object({
     roles: z.array(RoleKeyEnum).min(1),
     /** REPLACE overwrites the user's roles; ADD and REMOVE are incremental. */
-    mode: z.enum(['REPLACE', 'ADD', 'REMOVE']).default('REPLACE'),
+    mode: z.enum(["REPLACE", "ADD", "REMOVE"]).default("REPLACE"),
     reason: z.string().max(500).optional(),
   })
-  .openapi('AssignRolesRequest');
+  .openapi("AssignRolesRequest");
 
 export const ListUsersQuerySchema = PaginationQuery.extend({
   search: z.string().max(120).optional(),
   status: UserStatusEnum.optional(),
   role: RoleKeyEnum.optional(),
-}).openapi('ListUsersQuery');
+}).openapi("ListUsersQuery");
 
-export const AdminUserListResponseSchema = paginated(AdminUserSchema, 'AdminUserListResponse');
-
-// ===========================================================================
+export const AdminUserListResponseSchema = paginated(
+  AdminUserSchema,
+  "AdminUserListResponse",
+);
 // EVALUATION / HARNESS METRICS  (the evidence dashboard)
-// ===========================================================================
 
 export const EvalMetricsSchema = z
   .object({
@@ -187,7 +204,7 @@ export const EvalMetricsSchema = z
     p95LatencyMs: z.number().int(),
     createdAt: IsoDateTime,
   })
-  .openapi('EvalMetrics');
+  .openapi("EvalMetrics");
 
 export const HarnessStatsSchema = z
   .object({
@@ -200,4 +217,4 @@ export const HarnessStatsSchema = z
     approvalsBlocked: z.number().int(),
     openEscalations: z.number().int(),
   })
-  .openapi('HarnessStats');
+  .openapi("HarnessStats");

@@ -1,5 +1,5 @@
-import { prisma } from '../db/client.js';
-import { SCOPE_RANK, widestScope, type Scope } from '@eo/contracts';
+import { prisma, setDatabaseOnline } from "../db/client.js";
+import { SCOPE_RANK, widestScope, type Scope } from "@eo/contracts";
 
 export interface EffectivePermission {
   key: string;
@@ -34,33 +34,50 @@ export function invalidatePermissionCache(userId?: string): void {
   else cache.clear();
 }
 
-export async function resolvePermissions(userId: string): Promise<PermissionMap> {
+export async function resolvePermissions(
+  userId: string,
+): Promise<PermissionMap> {
   const hit = cache.get(userId);
   if (hit && hit.expiresAt > Date.now()) return hit.permissions;
 
-  const rows = await prisma.userRole.findMany({
-    where: { userId },
-    select: {
-      role: {
-        select: {
-          rolePermissions: {
-            select: {
-              scope: true,
-              permission: { select: { key: true, resource: true, action: true } },
+  let rows: any[] = [];
+  try {
+    rows = await prisma.userRole.findMany({
+      where: { userId },
+      select: {
+        role: {
+          select: {
+            rolePermissions: {
+              select: {
+                scope: true,
+                permission: {
+                  select: { key: true, resource: true, action: true },
+                },
+              },
             },
           },
         },
       },
-    },
-  });
+    });
+  } catch (error) {
+    setDatabaseOnline(false);
+    throw error;
+  }
 
   const map: PermissionMap = new Map();
-  for (const ur of rows) {
-    for (const rp of ur.role.rolePermissions) {
-      const key = rp.permission.key;
-      const existing = map.get(key);
-      // A user with several roles gets the WIDEST scope of any of them.
-      map.set(key, existing ? widestScope(existing, rp.scope as Scope) : (rp.scope as Scope));
+  if (rows.length > 0) {
+    for (const ur of rows) {
+      for (const rp of ur.role.rolePermissions) {
+        const key = rp.permission.key;
+        const existing = map.get(key);
+        // A user with several roles gets the WIDEST scope of any of them.
+        map.set(
+          key,
+          existing
+            ? widestScope(existing, rp.scope as Scope)
+            : (rp.scope as Scope),
+        );
+      }
     }
   }
 
@@ -71,7 +88,7 @@ export async function resolvePermissions(userId: string): Promise<PermissionMap>
 export function toEffectiveList(map: PermissionMap): EffectivePermission[] {
   return [...map.entries()]
     .map(([key, scope]) => {
-      const [resource = '', action = ''] = key.split('.');
+      const [resource = "", action = ""] = key.split(".");
       return { key, resource, action, scope };
     })
     .sort((a, b) => a.key.localeCompare(b.key));

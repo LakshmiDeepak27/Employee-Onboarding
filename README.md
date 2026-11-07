@@ -1,399 +1,204 @@
-# Employee Onboarding Orchestrator
+# Employee Onboarding
 
-An AI-assisted new-hire onboarding orchestrator that coordinates documents, equipment,
-payroll setup, benefits enrolment, training and manager tasks, based on a worker's profile
-and location.
+React/Vite frontend, Express API, Prisma/PostgreSQL, and optional Ollama/Gemini plan generation. The blue-and-white redesign uses real API records, nested routes, role guards, refresh-session recovery, and responsive layouts.
 
-Built for the **AI Innovation Challenge** (use case 3, Employee Onboarding).
+## Run locally
 
-> **Status: in development.** This README describes what is actually built today. Sections
-> marked *Not built yet* are not built yet. See [Current status](#current-status) for the
-> honest picture.
+Keep the supplied credentials only in the ignored `.env`. Teammates copy `.env.example` and obtain credentials privately.
 
----
-
-## The problem
-
-When an organisation hires someone, between fifteen and forty discrete things have to
-happen before that person can work, be paid correctly and be legally employed. Those
-things are owned by different people, they depend on each other, and — critically —
-**which ones apply depends on where the person works and how they are employed.**
-
-A Canadian hire needs federal and provincial tax declarations. A UK hire needs a
-right-to-work check completed *before* day one and pension auto-enrolment. Payroll cannot
-be set up before the tax form arrives, or the first payslip is wrong. A laptop with a
-five-day lead time ordered four days out means day one is wasted.
-
-In most organisations this lives in a generic checklist plus the memory of two or three
-experienced HR staff. The failure modes repeat on every hire.
-
-## The approach
-
-**The model proposes, deterministic code disposes, and a human authorises.**
-
-An LLM proposal is never the system's output. It is a *proposal* that must survive a
-numbered validator chain it cannot influence, checked against a policy corpus it cannot
-write to, before a named person accepts responsibility for it.
-
-| Pipeline stage | Kind | What it does |
-| --- | --- | --- |
-| 1. Profile intake | Code | Validate the worker profile |
-| 2. Jurisdiction resolution | Code | Find the governing policy documents, or **refuse** |
-| 3. Clause retrieval | Code | Hybrid metadata + vector search over approved clauses |
-| 4. Plan proposal | **LLM** | Propose tasks, each citing the clause that mandates it |
-| 5. Validator chain | Code | V1–V8: accept, repair, reject or insert |
-| 6. Graph and risk | Code | Topological sort, critical path, lead-time risk |
-| 7. Human review | Human | Approve, edit or escalate |
-| 8. Dispatch and audit | Code | Append-only audit trail |
-
-The model touches exactly one stage. Everything it produces is checked by stages that
-do not involve it.
-
----
-
-## Tech stack
-
-| Layer | Choice |
-| --- | --- |
-| Language | TypeScript 5.7 end to end |
-| API | Node.js 20 + Express 4 |
-| Validation | Zod — one schema drives runtime validation, TS types, OpenAPI and the LLM output contract |
-| Database | PostgreSQL 16 (Neon) + pgvector |
-| ORM | Prisma 6 |
-| Auth | JWT access + rotating refresh tokens, bcrypt, RBAC with row scoping |
-| Frontend | React 19 + Vite + TanStack Query |
-| API docs | OpenAPI 3.1, generated from the Zod schemas |
-| Logging | pino (structured, request-id correlated) |
-| Metrics | prom-client at `/metrics` |
-| CI | GitHub Actions |
-| LLM | Open-weight model via Ollama *(not wired up yet)* |
-
----
-
-## Repository layout
-
-An npm-workspaces monorepo. `apps/` holds the two deployable applications; `packages/`
-holds the one thing both of them need to share.
-
-```
-employee-onboarding/
-├── apps/
-│   ├── api/                      Express REST API
-│   │   ├── prisma/
-│   │   │   ├── schema.prisma     32 models, 29 enums
-│   │   │   └── seed.ts           RBAC catalog + reference data + demo users
-│   │   └── src/
-│   │       ├── db/client.ts      Prisma client singleton
-│   │       ├── auth/             tokens, login/refresh/logout service, routes
-│   │       ├── middleware/       authenticate, authorize, validate, errors, request-id
-│   │       ├── rbac/             permission resolution + scope enforcement
-│   │       ├── routes/           admin, reference, ops
-│   │       └── scripts/          OpenAPI emitter
-│   └── web/                      React 19 + Vite frontend
-│       └── src/lib/api.ts        typed API client
-├── packages/
-│   └── contracts/                the ONE shared package — see below
-│       └── src/
-│           ├── common.ts         primitives, enums, error envelope, pagination
-│           ├── rbac.ts           roles, 40 permissions, scopes  ← source of truth
-│           ├── auth.ts           JWT claims, login/refresh shapes
-│           ├── employees.ts      employee CRUD
-│           ├── plans.ts          plans, tasks, citations, findings, approval
-│           ├── services.ts       the six workflow services
-│           ├── policies.ts       knowledge base + admin + eval metrics
-│           ├── llm.ts            the model's constrained output contract
-│           └── openapi.ts        OpenAPI 3.1 document builder
-├── docs/
-│   ├── openapi.json              generated — do not hand-edit
-│   └── API-Contract.pdf          generated from openapi.json
-└── .github/workflows/ci.yml
+```sh
+npm ci
+npm run db:generate
+npm run build
+npm start
 ```
 
-### Why there is a `packages/` folder with exactly one thing in it
+Open http://localhost:4000. For development, run `npm run dev:api` and `npm run dev:web` in separate terminals; Vite opens on port 5173.
 
-`packages/` is for code that **both** `apps/api` and `apps/web` import. Right now that is
-one package, `@eo/contracts`, and it earns its place because a single Zod schema
-definition is used **four ways**:
+For a **new empty database**, run `npm run db:deploy`, then `npm run db:seed` to seed RBAC. Optional starter departments, jurisdictions, catalogs and clearly marked mock policies require `SEED_REFERENCE_DATA=true`; demo employee records and identities require `SEED_DEMO_DATA=true`. These fixtures are for local demonstration only and must not be treated as company or legal data. To bootstrap the first HR identity, set `BOOTSTRAP_HR_EMAIL=<username>.hr@clyora` for one `npm run db:seed` invocation. The app creates an invited account with the `hr_admin` database role and no password; create a matching Keycloak user with verified email, then sign in through OIDC. Do not use this bootstrap setting for existing users or in routine production startup. On PowerShell: `$env:BOOTSTRAP_HR_EMAIL='deepak.hr@clyora'; npm run db:seed; Remove-Item Env:BOOTSTRAP_HR_EMAIL`.
 
-1. Express validates incoming requests against it.
-2. React imports the inferred TypeScript types from it, so the UI cannot drift from the API.
-3. `docs/openapi.json` is generated from it.
-4. The JSON Schema handed to the LLM for constrained decoding comes from it.
+## Workflow
 
-If it lived inside `apps/api`, the frontend would have to reach across into the backend's
-source tree to import types — or, far more likely, redeclare them by hand and let them go
-stale. CI fails the build if the committed `openapi.json` stops matching these schemas.
+1. HR creates an employee, including location, department and reporting manager.
+2. Generate a plan and track its saved background job. When the configured model is unavailable, the deterministic baseline is used. Without approved policy coverage, the plan stays limited to safe operational setup tasks.
+3. Review sensitive tasks, then approve the plan. Approval creates downstream service records.
+4. Complete document, equipment, payroll, benefits, training and manager work. Prerequisites restrict actions; verified work advances plan progress.
+5. When every task is completed or explicitly skipped, the plan enters `AWAITING_COMPLETION_APPROVAL`. HR reviews the completed journey and records final sign-off; only then is the employee marked `ACTIVE` and the plan marked `COMPLETED`.
+6. Inspect plan audit history and download the IT pack. Its scripts are templates for administrator review, not automatically executed integrations.
 
-The database deliberately does **not** live here. Only the API talks to Postgres, so
-`prisma/` and the client sit inside `apps/api` where they belong.
+HR, IT, manager and employee workspaces share consistent navigation. The employee assistant currently searches policy sources; it does not claim to answer with AI.
+
+### Integrated Workflow Services
+
+- **Payroll Setup & Verification (Service 3)**:
+  - Task-scoped lifecycle (`AWAITING_TAX_FORM`, `AWAITING_BANK_DETAILS`, `PENDING`, `READY`, `VERIFIED`).
+  - Strict security controls: raw bank account and national ID strings are masked write-only and never stored or returned; only 4-digit suffixes and opaque tokens are persisted.
+  - Plan approval gate, dependency satisfaction checks, serializable transaction isolation, and mandatory tamper-evident audit trail.
+- **Benefits Statutory Enrolment & AI Advisor (Service 4)**:
+  - Enrolment window enforcement: statutory 31-day (Ontario CA-ON) and 30-day (UK/US) statutory windows with at-risk alerts.
+  - AI Benefit Advisor providing grounded recommendations, citing corporate policy and statutory references with authority refusal outside supported jurisdictions.
+- **Training Pathways & Compliance Deadlines (Service 5)**:
+  - Automated statutory course assignment (7-day Ontario OHSA worker health & safety, 30-day UK GDPR data protection).
+  - Grounded training advisory citing statutory requirements.
+- **Manager Tasks & Day-One Alignment (Service 6)**:
+  - Deterministic action generator producing prioritized recommendations (`ASSIGN_BUDDY`, `PREPARE_DAY_ONE_AGENDA`, `APPROVE_SYSTEM_ACCESS`, `SCHEDULE_INTRO_MEETINGS`, `SET_PROBATION_GOALS`).
+  - High-performance native TypeScript architecture replacing fragile LangGraph dependencies, preventing build and CI cache failures.
+
+## Keycloak OIDC Authentication & Security Architecture
+
+### 1. Production Sign-in & OIDC Authorization Code Flow with PKCE
+- **Flow**: Keycloak OIDC is the production authentication path using Authorization Code flow with PKCE (`code_challenge_method=S256`), CSRF state, and nonce protection.
+- **Verification**: ID tokens are exchanged directly over backchannel and verified using JWKS retrieved from Keycloak's `.well-known/openid-configuration` endpoint (`jose.jwtVerify`). Issuer, audience (`OIDC_CLIENT_ID`), expiration, and signature are enforced.
+- **Verified Email Enforcement**: Every ID token must contain `email_verified: true`. Unverified email addresses are strictly rejected with actionable guidance.
+- **Cookie Security**: Secure session cookies are issued:
+  - `eo_refresh`: Refresh token cookie (`httpOnly: true`, `sameSite: "lax"`, `path: "/api/v1/auth"`, `secure` in production).
+  - `eo_oidc_state`: PKCE verifier, state, and nonce storage during login handshake (`httpOnly: true`, `sameSite: "lax"`, 10-minute expiry, cleared immediately upon callback).
+- **Hardened Access**: Self-service public signup and password login are disabled. Users sign in through Keycloak OIDC; application roles and scopes are assigned through trusted provisioning and stored in the database.
+
+### 2. Database-Governed RBAC (Zero Claim Trust)
+- User permissions, roles (`hr_admin`, `it_admin`, `manager`, `employee`), and data scopes (`SELF`, `REPORTS`, `DEPARTMENT`, `ORG`) are defined and loaded exclusively from the application PostgreSQL database (`roles`, `user_roles`, `role_permissions`).
+- **Zero privilege escalation**: The application never derives or escalates roles from Keycloak token claims, groups, or email address patterns. Keycloak authenticates identity; the application database governs authorization.
+
+### 3. Pre-Provisioned Identity Linking & Conflict Prevention
+- A Keycloak identity is linked **only** to a pre-provisioned user account with a matching verified email.
+- Unprovisioned users (emails not found in the database) receive a 401 error instructing them to contact HR for provisioning.
+- **Conflicting Identity Protection**:
+  - Rejects sign-in if an incoming Keycloak subject (`sub`) is already bound to a different email.
+  - Rejects sign-in if the database account is already bound to a different Keycloak subject.
+- On valid first sign-in, the provider subject is persisted safely in `users.oidc_subject`, `users.auth_provider` is set to `'oidc'`, and any `INVITED` status automatically transitions to `ACTIVE`.
+
+### 4. HR Employee Activation
+- HR can send an activation link from an employee profile. The API creates or safely matches a Keycloak user, assigns only the `employee` role in the application database, and asks Keycloak to email a seven-day link requiring email verification and password setup.
+- The message is sent to the employee's real personal email. The Keycloak username uses the work-email prefix when provided; the verified email claim matches the pre-provisioned application account. No reusable password is generated, displayed, or sent by CLYORA.
+- Keycloak Admin API credentials stay on the API server. The portal requires a confidential service-account client with `realm-management` roles `manage-users`, `view-users`, and `query-users`; configure the realm's SMTP settings so Keycloak can deliver activation messages. Retrying an invite resends the action email for the same matching account.
 
 ---
 
-## Getting started
+## Local Keycloak Setup Guide
 
-### Prerequisites
+### 1. Start local Keycloak
+Copy `.env.example` to `.env`, set a local-only `KEYCLOAK_DEV_ADMIN_PASSWORD`, then run:
 
-- Node.js 20+
-- A PostgreSQL 16 database with the `vector` and `citext` extensions.
-  We use [Neon](https://neon.tech) (free tier, ~2 minutes, no install).
-
-### Setup
-
-```bash
-git clone https://github.com/LakshmiDeepak27/Employee-Onboarding.git
-cd Employee-Onboarding
-npm install
-
-cp .env.example .env
-#   Paste your Neon connection string into DATABASE_URL and DIRECT_URL.
-#   Generate secrets:
-#   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-
-npm run db:generate      # generate the Prisma client
-npm run db:push          # create the tables
-npm run db:seed          # RBAC catalog, reference data, demo users
-npm run db:check         # confirm it all landed
-
-npm run dev              # API on http://localhost:4000
-npm run dev -w @eo/web   # frontend on http://localhost:5173
+```powershell
+npm run auth:up
 ```
 
-Open **http://localhost:4000/docs** for interactive API documentation.
+Open http://localhost:8080/admin and sign in with `KEYCLOAK_DEV_ADMIN_USERNAME` and `KEYCLOAK_DEV_ADMIN_PASSWORD` from `.env`. `npm run auth:up` starts an existing container named `eo-keycloak` if you already created one with `docker run`; otherwise it creates the local Compose service. New Compose-managed Keycloak data is stored in the named `keycloak_data` volume. Start it again later with `npm run auth:up`; `npm run auth:stop` stops it and `npm run auth:logs` shows its logs. Do not run `docker compose down -v` if you want to keep local Keycloak configuration and application documents.
 
-### Demo accounts
+The local Keycloak service is behind the `local-identity` Compose profile and is not started by the normal production `docker compose up --build -d` command. `start-dev` is local testing only. For deployment, use a separately configured Keycloak production deployment or managed identity provider with HTTPS, a persistent production database, secure secrets, hostname/proxy settings, MFA policy, and SMTP. This Compose convenience does not create a production identity deployment.
 
-All three use the password `Onboard!ng2026`.
+If the existing standalone container is named `eo-keycloak`, `npm run auth:up` reuses it, preserving your current realm and clients. Do not start a second Keycloak container at the same time because both need port 8080.
 
-| Email | Role | Scope | Sees |
-| --- | --- | --- | --- |
-| `hr.admin@demo.io` | `hr_admin` | `ORG` | All five seeded employees |
-| `manager@demo.io` | `manager` | `REPORTS` | Only Priya, their direct report |
-| `priya@demo.io` | `employee` | `SELF` | Only herself |
+### 2. Create the Realm
+1. In the top-left dropdown, click **Create Realm**.
+2. Realm name: `employee-onboarding`.
+3. Click **Create**.
 
-### Useful scripts
+### 3. Configure the OIDC Client
+1. Navigate to **Clients** -> **Create client**.
+2. **General Settings**:
+   - Client type: `OpenID Connect`
+   - Client ID: `employee-onboarding-app`
+   - Name: `Employee Onboarding Application`
+   - Click **Next**.
+3. **Capability Config**:
+   - Client authentication: **ON** (Confidential client)
+   - Authorization: OFF
+   - Authentication flow: Standard flow (Authorization Code), Direct access grants (optional).
+   - Click **Next**.
+4. **Login Settings**:
+   - Root URL: `http://localhost:5173`
+   - Home URL: `http://localhost:5173`
+   - Valid redirect URIs: `http://localhost:4000/api/v1/auth/oidc/callback`
+   - Valid post logout redirect URIs: `http://localhost:5173/*`
+   - Web origins: `http://localhost:5173`, `http://localhost:4000`
+   - Click **Save**.
+5. **Credentials Tab**:
+   - Copy the **Client Secret** value and set it as `OIDC_CLIENT_SECRET` in your `.env`.
+6. **Advanced Settings Tab** (Scroll down):
+   - Proof Key for Code Exchange (PKCE) Code Challenge Method: `S256`.
+   - Click **Save**.
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Start the API with hot reload |
-| `npm run db:push` | Push the Prisma schema to the database |
-| `npm run db:seed` | Seed RBAC, reference data and demo users (idempotent) |
-| `npm run db:check` | Smoke-test the connection, schema and seed |
-| `npm run db:studio` | Open Prisma Studio |
-| `npm run openapi` | Regenerate `docs/openapi.json` |
-| `npm run openapi:check` | Fail if the committed spec drifts from the code |
-| `npx tsc -b` | Typecheck the whole workspace |
+### 4. Configure HR-managed employee activation
+1. Create a second OpenID Connect client named `employee-onboarding-provisioner`.
+2. Enable **Client authentication** and **Service accounts roles**; disable Standard flow and Direct access grants for this client.
+3. Under **Service account roles**, select client `realm-management` and assign `manage-users`, `view-users`, and `query-users` only.
+4. Copy its client secret into the API `.env` as `KEYCLOAK_ADMIN_CLIENT_ID=employee-onboarding-provisioner` and `KEYCLOAK_ADMIN_CLIENT_SECRET=<secret>`.
+5. In **Realm settings → Email**, configure and test SMTP delivery. Keycloak sends the time-limited verify-email and set-password link to the employee's personal email.
+6. Restart the API. HR can then open an employee profile and click **Send employee activation link**.
+
+### 5. Create the Initial HR User in Keycloak
+Create an enabled Keycloak user for each explicitly provisioned application account, with **Email verified** toggled **ON**. For example, if `BOOTSTRAP_HR_EMAIL=deepak.hr@clyora`, create username `deepak` with email `deepak.hr@clyora`. The matching application account and `hr_admin` role must already exist in the database; do not assign Keycloak realm roles.
+
+For each user:
+1. Navigate to **Users** -> **Add user**.
+2. Set Email and Username, toggle **Email verified** to **ON**, and click **Create**.
+3. Go to **Credentials**, set a strong password for that Keycloak user, set Temporary to **OFF**, and save. This is the SSO password; the app does not store it.
 
 ---
 
-## Authentication and authorization
+## How HR, Managers, and Employees Sign In
 
-### Token model
+### Production / Keycloak SSO Flow:
+1. Navigate to http://localhost:5173/login (or http://localhost:4000/login).
+2. Click **"Continue with Organization SSO (Keycloak)"**.
+3. You are redirected to Keycloak's login page with PKCE challenge, state, and nonce parameters.
+4. Sign in with the verified Keycloak identity whose email matches the provisioned application account.
+5. Keycloak redirects back to `GET /api/v1/auth/oidc/callback`.
+6. The API verifies the authorization code with Keycloak, validates the token signature against Keycloak JWKS, checks `email_verified: true`, links the identity on first login, sets the HTTP-only refresh cookie, and redirects to `/login?sso=success`.
+7. The application automatically loads the session with roles and scopes loaded from the application database:
+   - **HR Admin** enters `/hr/dashboard` with organization-wide HR controls.
+   - **IT Admin** enters `/it_admin/dashboard` with equipment-only fulfillment controls.
+   - **Manager** enters `/manager/dashboard` with direct-report scope.
+   - **Employee** enters `/employee/dashboard` with self scope.
 
-| Token | Lifetime | Storage |
-| --- | --- | --- |
-| Access | 15 min | `Authorization: Bearer <token>` |
-| Refresh | 7 days | httpOnly `eo_refresh` cookie, single use, rotated on every refresh |
+The login screen uses Keycloak SSO only; there are no demo login accounts, demo account switchers, or application password sign-in controls. Login addresses follow `<username>.hr@clyora`, `<username>.manager@clyora`, and `<username>@clyora`; trusted provisioning assigns matching application database roles, which remain the source of authorization. After signing out, choosing SSO again asks Keycloak to authenticate again so a different user can sign in.
 
-**The access token carries identity and role names only — not permissions.** Permissions
-are resolved from the database on every request (with a 30-second cache). The cost is one
-lookup; the benefit is that revoking a role takes effect on the next request rather than
-whenever the token happens to expire.
+## Configuration
 
-A `tokenVersion` column gives instant revocation with no blocklist: changing a password or
-forcing a logout increments it, and every live access token for that user dies immediately.
+- `DATABASE_URL`: pooled Neon connection for the application.
+- `DIRECT_URL`: direct connection for migrations.
+- `OIDC_ISSUER_URL`: Keycloak realm issuer URL (e.g. `http://localhost:8080/realms/employee-onboarding`).
+- `OIDC_CLIENT_ID`: Keycloak client ID (e.g. `employee-onboarding-app`).
+- `OIDC_CLIENT_SECRET`: Keycloak client secret from client credentials.
+- `OIDC_REDIRECT_URI`: backend callback URL (e.g. `http://localhost:4000/api/v1/auth/oidc/callback`).
+- `OIDC_SCOPES`: space-delimited OIDC scopes (`openid profile email`).
+- Separate JWT secrets are required (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`). Keep `DEV_AUTH_BYPASS=false` outside local development.
+- `LLM_PROVIDER=ollama` uses `OLLAMA_BASE_URL` and `LLM_MODEL`. Use `gemini` with `GEMINI_API_KEY`, or `disabled` for baseline-only generation.
+- For local inference: install Ollama, run `ollama pull qwen2.5:7b-instruct`, then `ollama serve`. The adapter uses schema-constrained `/api/chat`, bounded retries and timeouts.
+- Retrieval currently uses database jurisdiction/topic matching, not vector embeddings; `EMBEDDING_MODEL` is reserved for a future vector index.
+- Documents are stored in `DOCUMENT_STORAGE_DIR`, default `.data/documents`. PDF, PNG and JPEG uploads are limited to 5 MB and require authenticated download.
+- Email password recovery is not configured; the UI directs users to HR.
 
-Refresh tokens are stored only as SHA-256 hashes. Each belongs to a rotation *family*;
-replaying an already-rotated token revokes the whole family and logs
-`TOKEN_REUSE_DETECTED`.
+## Deployment
 
-### Three roles
+The simplest target is one Node/container service serving both the API and built frontend, with Neon and persistent document storage.
 
-Matching the system architecture diagram.
-
-| Role | Scope | Permissions | Notes |
-| --- | --- | --- | --- |
-| `hr_admin` | `ORG` | 40 | Everything. **The only role that can approve a plan.** |
-| `manager` | `REPORTS` | 14 | Direct reports only. No payroll grant at all. |
-| `employee` | `SELF` | 11 | Their own record only. |
-
-### Scope is the point
-
-A permission is `resource.action` held **at a scope**. Authorization runs two gates:
-
-1. Does the caller hold this permission at all? → **403** if not.
-2. Is the target row inside the scope they hold it at? → **404** if not.
-
-Out-of-scope rows return **404, not 403**, because a 403 would confirm the record exists.
-
-```bash
-# as manager@demo.io
-GET /api/v1/employees              # 200 — returns Priya only
-GET /api/v1/employees/{tom_id}     # 404 — not their report, existence not leaked
-PUT /api/v1/tasks/{id}/payroll     # 403 — this role has no payroll grant
+```sh
+docker compose up --build -d
 ```
 
-Nothing is hard-coded in route files. The whole catalog lives in
-`packages/contracts/src/rbac.ts` and is read by the seed, the middleware and the
-documentation. Guarding a route is one line:
+Compose uses `.env`, forces production mode and disables the development auth bypass. It applies migrations without reseeding or pushing schema. Set `CORS_ORIGIN` to the deployed HTTPS origin, use fresh JWT secrets and mount the document volume. Run a single API instance: jobs execute in-process and are not a distributed, restart-resilient queue.
 
-```ts
-router.get(
-  '/employees/:id',
-  requirePermission('employee.read', { target: byParam('id') }),
-  handler,
-);
+Docker execution and public hosting have not been verified in this environment. No live deployment has been made. For horizontal scaling, add durable workers and shared object storage first.
+
+## Checks
+
+```sh
+npm run build
+npm run lint
+npm test
+npm run openapi:check
 ```
 
-### Development bypass
+Live tests require the configured development database, a provisioned HR account, reference data, and `RUN_DATABASE_TESTS=true`. They create uniquely named `qa-…@example.invalid` employee records and a harmless upload; those records remain available for inspection.
 
-So teammates can build routes before login is wired into their screens:
+See [verification and limitations](docs/REDESIGN-PROGRESS.md).
 
-```bash
-curl -H "x-dev-user: hr.admin@demo.io" http://localhost:4000/api/v1/employees
-```
+## Backend LLM boundary
 
-The API **refuses to boot** if `DEV_AUTH_BYPASS=true` while `NODE_ENV` is anything other
-than `development`, so it cannot reach CI or a deployed environment.
+Proposals are validated before persistence. Template authority, owner, service, deadlines and prerequisites override model values. Citations must quote stored clauses; missing database sources are never replaced with invented in-memory policy data. Cyclic proposals are rejected. Validation findings are saved in the same plan transaction, and the configured model name is recorded. Active job creation is serialized per employee with a PostgreSQL advisory lock.
 
----
+Ollama API contract: https://docs.ollama.com/api/chat and https://docs.ollama.com/capabilities/structured-outputs.
 
-## Database schema
-
-32 models, 29 enums, in `packages/db/prisma/schema.prisma`. Every table maps to a component
-in the architecture diagram.
-
-| Diagram component | Tables |
-| --- | --- |
-| Authentication (JWT) / RBAC | `users`, `roles`, `permissions`, `role_permissions`, `user_roles`, `refresh_tokens`, `auth_events` |
-| Employee Profile Processor | `employees`, `departments`, `jurisdictions` |
-| HR Policy Knowledge Base | `policy_documents`, `policy_clauses` |
-| Rules Engine | `task_templates` |
-| Onboarding Orchestrator | `onboarding_plans`, `plan_tasks`, `plan_task_dependencies`, `task_citations` |
-| Document Collection & Verification | `documents`, `document_requests` |
-| Equipment Allocation (IT) | `equipment_catalog`, `equipment_assignments` |
-| Payroll Setup (Finance) | `payroll_setups` |
-| Benefits Enrolment (HR) | `benefit_plans`, `benefit_enrollments` |
-| Training Assignment (L&D) | `training_courses`, `training_assignments` |
-| Manager Tasks (Team Setup) | `manager_tasks` |
-| AI Guardrails / Audit Logs | `llm_calls`, `validation_findings`, `audit_events`, `escalations` |
-| Email / Notifications | `notifications` |
-
-### Four decisions worth knowing
-
-**A citation is a foreign key, not a string.** `task_citations.clause_id` references
-`policy_clauses.id`, whose primary key is a stable readable string like `CA-ON-BEN-004`.
-This makes citation validation a database join rather than a hope: a clause id the model
-invents simply fails the constraint. We also store the quoted span and verify it actually
-occurs in the clause body.
-
-**The dependency graph is edges in a table.** `plan_task_dependencies` is a plain join
-table with `CHECK (task_id <> depends_on_id)`, so topological sort and cycle detection are
-ordinary code with ordinary unit tests.
-
-**Deadlines are never stored from the model.** `task_templates` holds a deadline *rule* and
-`jurisdictions` holds the business-day calendar. `plan_tasks.due_date` is always computed
-in code. The model is never given a date field to fill in.
-
-**The audit trail is append-only at the grant level.** `audit_events` will have UPDATE and
-DELETE revoked from the application role, so the API physically cannot rewrite history.
-
-### What the schema deliberately does not store
-
-- **No bank account or national id numbers.** `payroll_setups` keeps only `last4` plus an
-  opaque token. Those request fields are write-only and never appear in a response.
-- **No plaintext secrets.** Passwords are bcrypt hashes; refresh tokens are SHA-256 digests.
-- **Every policy document is flagged `is_mock`.** The corpus is written by the team for
-  demonstration and is **not legal guidance**.
-
----
-
-## API documentation
-
-- **Interactive:** http://localhost:4000/docs (Swagger UI)
-- **Machine-readable:** [`docs/openapi.json`](docs/openapi.json) — 53 paths, 60 operations, 87 schemas
-- **PDF reference:** [`docs/API-Contract.pdf`](docs/API-Contract.pdf)
-
-All three are generated from the same Zod schemas that validate requests at runtime, so
-they cannot drift from the code. CI enforces it.
-
-Every non-2xx response uses one envelope:
-
-```json
-{
-  "error": {
-    "code": "VALIDATION_FAILED",
-    "message": "Request body failed validation",
-    "fields": [{ "path": "startDate", "message": "must be YYYY-MM-DD" }],
-    "requestId": "b7c1e2f0-5a3d-4c11-9f2e-8d6a4b0c1e77",
-    "timestamp": "2026-11-06T09:30:00.000Z"
-  }
-}
-```
-
----
-
-## Current status
-
-Honest state of the build. Nothing below is marked done unless it compiles and is committed.
-
-### Built
-
-| Area | What exists |
-| --- | --- |
-| Database schema | 32 models, 29 enums, validates against Prisma. Seed script covering RBAC, 4 jurisdictions, catalogs and 5 demo employees |
-| Contracts package | Zod schemas for every endpoint; 40-permission RBAC catalog; the LLM output contract |
-| OpenAPI | 60 operations generated from Zod; Swagger UI at `/docs`; CI drift check |
-| Auth | Login, refresh with rotation + reuse detection, logout, change password, `/auth/me`. Account lockout, rate limiting, `auth_events` logging |
-| RBAC | Permission resolution with cache, scope enforcement (`SELF`/`REPORTS`/`ORG`), `requirePermission` middleware, 404-not-403 rule |
-| Admin API | User CRUD, role assignment, role listing — all audited |
-| Ops | `/healthz`, `/readyz` (database and LLM reported separately), `/metrics` |
-| Middleware | Request id, Zod validation, structured errors, pino logging with redaction |
-| CI | GitHub Actions: typecheck, lint, OpenAPI drift, unit, integration with a pgvector service, build |
-| Frontend | Vite + React 19 scaffold with a typed API client, login, and a scope demonstration screen |
-
-### Not built yet
-
-| Area | Owner |
-| --- | --- |
-| Policy corpus (the mock jurisdiction documents) | — |
-| Rules engine: deadline maths, business-day calendars, topological sort, critical path | — |
-| LLM integration: Ollama client, prompts, constrained decoding, pgvector retrieval | — |
-| Validator chain V1–V8 | — |
-| Plan generation endpoints and the pg-boss job runner | — |
-| The six workflow service endpoints | — |
-| Employee CRUD endpoints (contracts exist, handlers do not) | — |
-| Frontend: HR dashboard, plan review, dependency graph, findings panel | — |
-| Tests (the CI jobs run with `--passWithNoTests`) | — |
-| Evaluation harness and golden set | — |
-| Docker Compose for one-command startup | — |
-| Demo recording | — |
-
-### Known gaps and caveats
-
-- **No tests yet.** The CI test jobs pass trivially because there are no test files. The
-  harness is wired; the tests are not written.
-- **`audit_events` grant revocation** is described above but the migration that performs
-  the `REVOKE` has not been written yet. Today it is append-only by convention only.
-- **Migrations use `db push`, not `migrate dev`.** Fine for the hackathon; a real project
-  would want versioned migrations before any shared environment.
-- **The policy corpus is author-written.** It is realistic in shape but it is not real law
-  and must never be presented as legal guidance.
-
----
-
-## Team
-
-| Workstream | Owner |
-| --- | --- |
-| Database schema, CI/CD, authentication (RBAC), API contracts | Himanshu |
-| Frontend | Trisha, Neelavathi |
-| Onboarding orchestration — first three workflow services | Deepak, Teja, Himanshu, Dinesh |
-| Onboarding orchestration — last three workflow services | Vardhan, Shruthi |
-| Deployment and DevOps | Deepak, Himanshu, Vardhan |
-| Presentation | Neelavathi |
-
----
-
-## License
-
-MIT
+Local Ollama was not running during verification. Adapter success/failure/schema tests use mocked HTTP responses; they do not establish real model quality. In Docker, localhost refers to the container: use a reachable private Ollama service URL or host.docker.internal for a host service, without exposing Ollama publicly.

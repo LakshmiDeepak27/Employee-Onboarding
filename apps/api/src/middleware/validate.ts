@@ -1,6 +1,6 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { badRequest, zodFieldErrors } from '../lib/errors.js';
+import type { NextFunction, Request, RequestHandler, Response } from "express";
+import { z } from "zod";
+import { badRequest, zodFieldErrors } from "../lib/errors.js";
 
 export interface ValidationSchemas {
   body?: z.ZodTypeAny;
@@ -16,21 +16,30 @@ export interface ValidationSchemas {
  */
 export function validate(schemas: ValidationSchemas): RequestHandler {
   return (req: Request, _res: Response, next: NextFunction) => {
-    for (const key of ['params', 'query', 'body'] as const) {
+    for (const key of ["params", "query", "body"] as const) {
       const schema = schemas[key];
       if (!schema) continue;
       const result = schema.safeParse(req[key]);
       if (!result.success) {
         return next(
-          badRequest(`Request ${key} failed validation`, zodFieldErrors(result.error)),
+          badRequest(
+            `Request ${key} failed validation`,
+            zodFieldErrors(result.error),
+          ),
         );
       }
-      Object.defineProperty(req, key, { value: result.data, writable: true, configurable: true });
+      Object.defineProperty(req, key, {
+        value: result.data,
+        writable: true,
+        configurable: true,
+      });
     }
     next();
   };
 }
 
 /** Typed helpers so handlers can read parsed values without casting. */
-export const body = <T extends z.ZodTypeAny>(req: Request): z.infer<T> => req.body;
-export const query = <T extends z.ZodTypeAny>(req: Request): z.infer<T> => req.query as z.infer<T>;
+export const body = <T extends z.ZodTypeAny>(req: Request): z.infer<T> =>
+  req.body;
+export const query = <T extends z.ZodTypeAny>(req: Request): z.infer<T> =>
+  req.query as z.infer<T>;

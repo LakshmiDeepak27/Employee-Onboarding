@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: eo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-employee_onboarding}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Local-only Keycloak for development. This is deliberately behind a profile
+  # so the production app stack never starts Keycloak in start-dev mode.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: eo-keycloak
+    profiles: [local-identity]
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_DEV_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_DEV_ADMIN_PASSWORD:-local-admin-change-me}
+    ports:
+      - '127.0.0.1:8080:8080'
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DEV_AUTH_BYPASS: 'false'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-access-secret-change-before-deploying-32}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-refresh-secret-change-before-deploying-32}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DOCUMENT_STORAGE_DIR: /app/.data/documents
+    depends_on:
+      db:
+        condition: service_started
+    volumes:
+      - documents:/app/.data/documents
+    command: sh -c "node node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/index.js"
+volumes:
+  postgres_data:
+  documents:
+  keycloak_data:
