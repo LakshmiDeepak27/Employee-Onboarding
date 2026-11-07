@@ -4,7 +4,6 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import rateLimit from "express-rate-limit";
 import {
   LoginRequestSchema,
-  SignupRequestSchema,
   AcceptInviteRequestSchema,
   RefreshRequestSchema,
   LogoutRequestSchema,
@@ -137,24 +136,6 @@ authRouter.get("/oidc/callback", async (req, res, next) => {
         code_verifier: stored.verifier,
       }),
     });
-
-    authRouter.post(
-      "/accept-invite",
-      validate({ body: AcceptInviteRequestSchema }),
-      async (req, res, next) => {
-        try {
-          const { token, newPassword } = req.body as {
-            token: string;
-            newPassword: string;
-          };
-          const session = await auth.acceptInvite(token, newPassword, meta(req));
-          setRefreshCookie(res, session.refreshToken);
-          res.status(200).json(session);
-        } catch (e) {
-          next(e);
-        }
-      },
-    );
     if (!tokenResponse.ok) throw unauthenticated("SSO token exchange failed");
     const tokenPayload = (await tokenResponse.json()) as { id_token?: string };
     if (!tokenPayload.id_token) throw unauthenticated("SSO provider returned no identity token");
@@ -164,6 +145,9 @@ authRouter.get("/oidc/callback", async (req, res, next) => {
     });
     if (verified.payload.nonce !== stored.nonce) {
       throw unauthenticated("Invalid SSO nonce", "TOKEN_INVALID");
+    }
+    if (verified.payload.email_verified !== true) {
+      throw unauthenticated("Your identity provider must verify your email address");
     }
     const email = typeof verified.payload.email === "string" ? verified.payload.email.toLowerCase() : null;
     const subject = verified.payload.sub;
@@ -176,20 +160,22 @@ authRouter.get("/oidc/callback", async (req, res, next) => {
     next(e);
   }
 });
-// POST /api/v1/auth/signup
 authRouter.post(
-  "/signup",
-  validate({ body: SignupRequestSchema }),
+  "/accept-invite",
+  validate({ body: AcceptInviteRequestSchema }),
   async (req, res, next) => {
     try {
-      const session = await auth.signup(req.body as any, meta(req));
+      const { token, newPassword } = req.body as { token: string; newPassword: string };
+      const session = await auth.acceptInvite(token, newPassword, meta(req));
       setRefreshCookie(res, session.refreshToken);
-      res.status(201).json(session);
-    } catch (e) {
-      next(e);
-    }
+      res.status(200).json(session);
+    } catch (e) { next(e); }
   },
 );
+// POST /api/v1/auth/signup
+authRouter.post("/signup", (_req, res) => {
+  res.status(403).json({ error: { code: "FORBIDDEN", message: "Self-service signup is disabled. Ask your organization administrator for an invitation." } });
+});
 // POST /api/v1/auth/forgot-password
 authRouter.post("/forgot-password", async (req, res, next) => {
   try {
@@ -210,6 +196,7 @@ authRouter.post(
   validate({ body: LoginRequestSchema }),
   async (req, res, next) => {
     try {
+      if (isProd) throw unauthenticated("Use organization SSO to sign in");
       const { email, password } = req.body as {
         email: string;
         password: string;

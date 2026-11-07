@@ -56,7 +56,7 @@ const EnvSchema = z
 
     LLM_PROVIDER: z.enum(["ollama", "gemini", "disabled"]).default("ollama"),
     GEMINI_API_KEY: z.string().optional(),
-    GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
+    GEMINI_MODEL: z.string().default("gemini-3.8-flash"),
     GEMINI_EMBEDDING_MODEL: z.string().default("text-embedding-004"),
     AI_TIMEOUT_MS: z.coerce.number().int().min(100).max(300000).default(60000),
     AI_MAX_RETRIES: z.coerce.number().int().min(1).max(3).default(1),

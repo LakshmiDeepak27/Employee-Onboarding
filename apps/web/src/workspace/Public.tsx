@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useSession, homeFor } from "./session";
 import { ClyoraLogo } from "./ClyoraLogo";
-import { ApiError } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 
 const BrandMark = ClyoraLogo;
 
@@ -559,8 +559,16 @@ export function Login() {
               {busy ? "Signing in…" : "Sign in"}
             </button>
 
+            <button
+              className="auth-submit-btn"
+              type="button"
+              onClick={() => api.auth.oidcStart()}
+            >
+              Continue with organization SSO
+            </button>
+
             <p className="auth-sso-note" role="note">
-              Single sign-on is not configured for this environment.
+              Organization SSO is used for deployment. Demo credentials above are for local development only.
             </p>
 
             <div className="auth-switch-prompt">

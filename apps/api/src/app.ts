@@ -21,7 +21,7 @@ import { employeesRouter } from "./routes/employees.js";
 import { jobsRouter } from "./routes/jobs.js";
 import { plansRouter } from "./routes/plans.js";
 import { tasksRouter } from "./routes/tasks.js";
-import { policiesRouter } from "./routes/policies.js";
+import { policiesRouter, clausesRouter } from "./routes/policies.js";
 import { escalationsRouter } from "./routes/escalations.js";
 import { workflowRouter } from "./routes/workflowServices.js";
 import { chatRouter } from "./routes/chat.js";
@@ -102,11 +102,14 @@ export function createApp() {
   app.use("/api/v1/plans", plansRouter);
   app.use("/api/v1/tasks", tasksRouter);
   app.use("/api/v1/policies", policiesRouter);
+  app.use("/api/v1/clauses", clausesRouter);
   app.use("/api/v1/escalations", escalationsRouter);
   app.use("/api/v1", workflowRouter);
   app.use("/api/v1", referenceRouter);
   app.use("/api/v1", chatRouter);
-  const webDistPath = path.resolve(process.cwd(), "apps/web/dist");
+  const webDistPath = fs.existsSync(path.resolve(process.cwd(), "apps/web/dist"))
+    ? path.resolve(process.cwd(), "apps/web/dist")
+    : path.resolve(process.cwd(), "../web/dist");
   if (fs.existsSync(webDistPath)) {
     app.use(express.static(webDistPath));
     app.get("*", (req, res, next) => {

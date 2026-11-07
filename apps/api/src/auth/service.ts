@@ -317,10 +317,20 @@ export async function login(
 }
 
 export async function loginWithOidc(subject: string, email: string, meta: RequestMeta) {
-  const user = await prisma.user.findFirst({
-    where: { OR: [{ oidcSubject: subject }, { email }] },
-    select: { id: true, oidcSubject: true, status: true },
-  });
+  const [bySubject, byVerifiedEmail] = await Promise.all([
+    prisma.user.findUnique({
+      where: { oidcSubject: subject },
+      select: { id: true, oidcSubject: true, status: true },
+    }),
+    prisma.user.findUnique({
+      where: { email },
+      select: { id: true, oidcSubject: true, status: true },
+    }),
+  ]);
+  if (bySubject && byVerifiedEmail && bySubject.id !== byVerifiedEmail.id) {
+    throw unauthenticated("The SSO identity conflicts with the provisioned account", "TOKEN_INVALID");
+  }
+  const user = bySubject ?? byVerifiedEmail;
 
   if (!user) {
     await recordAuthEvent({
