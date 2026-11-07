@@ -728,7 +728,7 @@ workflowRouter.put(
           employeeId: task.plan.employeeId,
           status: "READY",
           payFrequency: b.payFrequency ?? "SEMIMONTHLY",
-          salaryCurrency: b.salaryCurrency ?? "CAD",
+          salaryCurrency: b.salaryCurrency ?? "INR",
           taxFormType: b.taxFormType ?? "TD1",
           taxFormReceivedAt: b.taxFormReceived ? new Date() : null,
           bankAccountLast4: bankLast4 ?? null,

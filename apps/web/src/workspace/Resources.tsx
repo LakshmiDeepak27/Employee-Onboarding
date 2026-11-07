@@ -962,7 +962,8 @@ export function Payroll() {
             <option value="">Select a payroll task</option>
             {tasks.data?.items.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.title} · {t.dueDate} · {t.id.slice(0, 8)}
+                {t.title.replace(/^DEMO\s*[—-]\s*/i, "").trim()} · {t.dueDate} ·{" "}
+                {t.id.slice(0, 8)}
               </option>
             ))}
           </select>
@@ -1011,7 +1012,7 @@ export function Payroll() {
                       minLength={3}
                       maxLength={3}
                       defaultValue={setup.data?.salaryCurrency ?? ""}
-                      placeholder="CAD"
+                      placeholder="INR"
                     />
                   </label>
                   <label>
