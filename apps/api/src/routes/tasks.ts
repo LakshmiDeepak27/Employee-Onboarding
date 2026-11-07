@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { prisma, isDatabaseOnline, setDatabaseOnline } from "../db/client.js";
+import { prisma, isDatabaseOnline, isDatabaseConnectivityError, databaseUnavailableError } from "../db/client.js";
 import { ListTasksQuerySchema, z } from "@eo/contracts";
 import { authenticate, requireAuth } from "../middleware/authenticate.js";
 import { requirePermission } from "../middleware/authorize.js";
@@ -89,48 +89,30 @@ tasksRouter.get(
       let items: any[] = [];
       let totalItems = 0;
       if (isDatabaseOnline()) {
-        try {
-          const [dbItems, count] = await Promise.all([
-            prisma.planTask.findMany({
-              where,
-              include: {
-                assignee: { select: { email: true } },
-                dependencies: true,
-                citations: {
-                  include: {
-                    clause: {
-                      include: {
-                        document: { select: { title: true, isMock: true } },
-                      },
+        const [dbItems, count] = await Promise.all([
+          prisma.planTask.findMany({
+            where,
+            include: {
+              assignee: { select: { email: true } },
+              dependencies: true,
+              citations: {
+                include: {
+                  clause: {
+                    include: {
+                      document: { select: { title: true, isMock: true } },
                     },
                   },
                 },
               },
-              orderBy: { dueDate: "asc" },
-              skip: (q.page - 1) * q.pageSize,
-              take: q.pageSize,
-            }),
-            prisma.planTask.count({ where }),
-          ]);
-          items = dbItems;
-          totalItems = count;
-        } catch {
-          setDatabaseOnline(false);
-        }
-      }
-
-      if (items.length === 0 && !isDatabaseOnline()) {
-        // DB offline fallback: collect from IN_MEMORY_PLANS
-        const { IN_MEMORY_PLANS } =
-          await import("../orchestration/orchestrator.js");
-        const allTasks: any[] = [];
-        for (const plan of IN_MEMORY_PLANS.values()) {
-          for (const t of plan.tasks ?? []) {
-            allTasks.push(t);
-          }
-        }
-        items = allTasks;
-        totalItems = allTasks.length;
+            },
+            orderBy: { dueDate: "asc" },
+            skip: (q.page - 1) * q.pageSize,
+            take: q.pageSize,
+          }),
+          prisma.planTask.count({ where }),
+        ]);
+        items = dbItems;
+        totalItems = count;
       }
 
       res.json({

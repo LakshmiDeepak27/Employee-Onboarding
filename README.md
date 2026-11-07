@@ -6,16 +6,17 @@ React/Vite frontend, Express API, Prisma/PostgreSQL, and optional Ollama/Gemini 
 
 Keep the supplied credentials only in the ignored `.env`. Teammates copy `.env.example` and obtain credentials privately.
 
-```sh
-npm ci
-npm run db:generate
-npm run build
-npm start
+Use Node.js 22 and Docker Desktop. Copy `.env.example` to `.env`; for local PostgreSQL, keep the example `DATABASE_URL` and `DIRECT_URL` values. If you intentionally use Neon, replace them with the pooled and direct Neon URLs and make sure the Neon project is active and reachable.
+
+```powershell
+docker compose up -d db
+npm run setup
+npm run dev:api
 ```
 
-Open http://localhost:4000. For development, run `npm run dev:api` and `npm run dev:web` in separate terminals; Vite opens on port 5173.
+In a second terminal run `npm run dev:web`, then open http://localhost:5173. `npm run setup` generates Prisma, applies migrations, seeds RBAC/reference data and clearly labelled demo templates (no demo users/employees by default), then builds the project. Configure all four OIDC variables in `.env` before attempting Keycloak sign-in. The app will return a clear 503 if PostgreSQL is unreachable; it does not fabricate sessions or records.
 
-For a **new empty database**, run `npm run db:deploy`, then `npm run db:seed` to seed RBAC. Optional starter departments, jurisdictions, catalogs and clearly marked mock policies require `SEED_REFERENCE_DATA=true`; demo employee records and identities require `SEED_DEMO_DATA=true`. These fixtures are for local demonstration only and must not be treated as company or legal data. To bootstrap the first HR identity, set `BOOTSTRAP_HR_EMAIL=<username>.hr@clyora` for one `npm run db:seed` invocation. The app creates an invited account with the `hr_admin` database role and no password; create a matching Keycloak user with verified email, then sign in through OIDC. Do not use this bootstrap setting for existing users or in routine production startup. On PowerShell: `$env:BOOTSTRAP_HR_EMAIL='deepak.hr@clyora'; npm run db:seed; Remove-Item Env:BOOTSTRAP_HR_EMAIL`.
+For an existing database, use `npm run db:deploy` then rerun `npm run db:seed:reference` and `npm run db:seed:templates`. Demo employee records and identities remain opt-in through `SEED_DEMO_DATA=true`. To bootstrap the first HR identity, set `BOOTSTRAP_HR_EMAIL=<username>.hr@clyora` for one `npm run db:seed` invocation. The app creates an invited account with the `hr_admin` database role and no password; create a matching Keycloak user with verified email, then sign in through OIDC. Do not use this bootstrap setting for existing users or routine production startup. On PowerShell: `$env:BOOTSTRAP_HR_EMAIL='deepak.hr@clyora'; npm run db:seed; Remove-Item Env:BOOTSTRAP_HR_EMAIL`.
 
 ## Workflow
 

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: eo-postgres
     restart: unless-stopped
     environment:
@@ -11,6 +11,11 @@ services:
       - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-employee_onboarding}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   # Local-only Keycloak for development. This is deliberately behind a profile
   # so the production app stack never starts Keycloak in start-dev mode.
@@ -28,6 +33,36 @@ services:
     volumes:
       - keycloak_data:/opt/keycloak/data
 
+  migrate:
+    build: .
+    restart: "no"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-access-secret-change-before-deploying-32}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-refresh-secret-change-before-deploying-32}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy", "--schema", "apps/api/prisma/schema.prisma"]
+
+  seed:
+    build: .
+    restart: "no"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
+      DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-access-secret-change-before-deploying-32}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-refresh-secret-change-before-deploying-32}
+      SEED_REFERENCE_DATA: 'true'
+      SEED_DEMO_DATA: 'false'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["sh", "-c", "node node_modules/tsx/dist/cli.mjs apps/api/prisma/seed.ts --reference && node node_modules/tsx/dist/cli.mjs apps/api/prisma/seed-templates.ts"]
+
   api:
     build: .
     restart: unless-stopped
@@ -37,22 +72,21 @@ services:
       - path: .env
         required: false
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 4000
       DEV_AUTH_BYPASS: 'false'
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
       DIRECT_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-employee_onboarding}?schema=public
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-access-secret-change-before-deploying-32}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-refresh-secret-change-before-deploying-32}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DOCUMENT_STORAGE_DIR: /app/.data/documents
     depends_on:
-      db:
-        condition: service_started
+      seed:
+        condition: service_completed_successfully
     volumes:
       - documents:/app/.data/documents
-    command: sh -c "node node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/index.js"
 volumes:
   postgres_data:
   documents:

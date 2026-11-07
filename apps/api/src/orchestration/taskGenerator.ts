@@ -240,6 +240,9 @@ export function generatePlanTasks(
     const depIds: string[] = [];
     for (const depType of task.dependsOnTaskTypes) {
       const depId = taskTypeToId.get(depType);
+      if (!depId) {
+        throw new Error(`Task ${task.taskType} depends on missing task type ${depType}; plan generation refused.`);
+      }
       if (depId && depId !== task.id) {
         depIds.push(depId);
         edges.push({ from: depId, to: task.id });

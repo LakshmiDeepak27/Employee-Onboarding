@@ -24,6 +24,7 @@ import { navigation, type Workspace } from "./navigation";
 import { useSession } from "./session";
 import { api, can } from "../lib/api";
 import { ClyoraLogo } from "./ClyoraLogo";
+import { ChatWidget } from "./ChatWidget";
 
 export function Shell({ workspace }: { workspace: Workspace }) {
   const { user, signOut } = useSession();
@@ -279,6 +280,7 @@ export function Shell({ workspace }: { workspace: Workspace }) {
             Workspace guide <ArrowUpRight size={12} />
           </Link>
         </footer>
+        <ChatWidget />
       </main>
     </div>
   );

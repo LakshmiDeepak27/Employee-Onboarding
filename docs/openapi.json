@@ -180,6 +180,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -278,6 +279,7 @@
                   "ACCOUNT_LOCKED",
                   "PASSWORD_CHANGE_REQUIRED",
                   "APPROVAL_BLOCKED",
+                  "MISSING_TEMPLATES",
                   "UNSUPPORTED_JURISDICTION",
                   "RATE_LIMITED",
                   "UPSTREAM_UNAVAILABLE",
@@ -2751,6 +2753,7 @@
               "ORDERED",
               "SHIPPED",
               "DELIVERED",
+              "RECEIVED",
               "RETURNED"
             ]
           },
@@ -2785,6 +2788,14 @@
             "format": "date-time",
             "example": "2026-11-06T09:30:00.000Z"
           },
+          "receivedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "example": "2026-11-06T09:30:00.000Z"
+          },
           "notes": {
             "type": [
               "string",
@@ -2801,6 +2812,7 @@
           "orderedAt",
           "expectedDelivery",
           "deliveredAt",
+          "receivedAt",
           "notes"
         ]
       },
@@ -2831,6 +2843,7 @@
               "ORDERED",
               "SHIPPED",
               "DELIVERED",
+              "RECEIVED",
               "RETURNED"
             ]
           },
@@ -3806,6 +3819,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -3886,6 +3900,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -3937,6 +3952,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]
@@ -3973,6 +3989,7 @@
             "type": "string",
             "enum": [
               "hr_admin",
+              "it_admin",
               "manager",
               "employee"
             ]
@@ -9265,6 +9282,7 @@
               "type": "string",
               "enum": [
                 "hr_admin",
+                "it_admin",
                 "manager",
                 "employee"
               ]

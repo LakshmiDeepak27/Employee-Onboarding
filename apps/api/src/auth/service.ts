@@ -4,6 +4,8 @@ import {
   prisma,
   isDatabaseOnline,
   setDatabaseOnline,
+  isDatabaseConnectivityError,
+  databaseUnavailableError,
   type AuthEventType,
 } from "../db/client.js";
 import { env } from "../config/env.js";
@@ -48,8 +50,9 @@ async function recordAuthEvent(input: {
           userAgent: input.meta.userAgent ?? null,
         },
       });
-    } catch {
-      setDatabaseOnline(false);
+    } catch (error) {
+      if (isDatabaseConnectivityError(error)) throw databaseUnavailableError(error);
+      throw error;
     }
   }
 }
@@ -79,8 +82,9 @@ async function buildSession(
           userRoles: { select: { role: { select: { key: true } } } },
         },
       });
-    } catch {
-      setDatabaseOnline(false);
+    } catch (error) {
+      if (isDatabaseConnectivityError(error)) throw databaseUnavailableError(error);
+      throw error;
     }
   }
 
@@ -110,8 +114,9 @@ async function buildSession(
           ipAddress: meta.ipAddress ?? null,
         },
       });
-    } catch {
-      setDatabaseOnline(false);
+    } catch (error) {
+      if (isDatabaseConnectivityError(error)) throw databaseUnavailableError(error);
+      throw error;
     }
   }
 
@@ -220,9 +225,9 @@ export async function login(
           lockedUntil: true,
         },
       });
-    } catch {
-      setDatabaseOnline(false);
-      user = null;
+    } catch (error) {
+      if (isDatabaseConnectivityError(error)) throw databaseUnavailableError(error);
+      throw error;
     }
   }
 

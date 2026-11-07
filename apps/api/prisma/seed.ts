@@ -163,6 +163,15 @@ async function seedCatalogs() {
       enrollmentWindowDays: 30,
       isAutoEnrol: false,
     },
+    {
+      code: 'SG-DEMO-OPTIONS',
+      name: 'Singapore Benefits Options (Demo)',
+      type: 'WELLNESS' as const,
+      jurisdictionCode: 'SG',
+      enrollmentWindowDays: 30,
+      isAutoEnrol: false,
+      description: 'DEMO ONLY — replace with company-approved benefits and HR-verified enrollment terms before use.',
+    },
   ];
   for (const b of benefits) {
     await prisma.benefitPlan.upsert({ where: { code: b.code }, create: b, update: b });
@@ -379,7 +388,7 @@ async function main() {
   console.log('\nSeeding Employee Onboarding database\n');
   await seedRbac();
   await seedBootstrapHr();
-  if (process.env.SEED_REFERENCE_DATA === 'true') {
+  if (process.env.SEED_REFERENCE_DATA === 'true' || process.argv.includes('--reference')) {
     await seedJurisdictions();
     await seedDepartments();
     await seedCatalogs();

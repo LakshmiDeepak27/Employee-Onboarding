@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { Prisma } from "../db/client.js";
+import { Prisma, isDatabaseConnectivityError, databaseUnavailableError } from "../db/client.js";
 import { AppError, zodFieldErrors } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { isProd } from "../config/env.js";
@@ -25,6 +25,8 @@ export function errorHandler(
         fields: zodFieldErrors(err),
       },
     );
+  } else if (isDatabaseConnectivityError(err)) {
+    appError = databaseUnavailableError(err);
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     switch (err.code) {
       case "P2002": {

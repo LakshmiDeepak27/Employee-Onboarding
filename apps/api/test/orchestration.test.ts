@@ -167,7 +167,7 @@ describe('3. Progress Tracker & Status Transitions', () => {
     expect(progress.dayOneReady).toBe(true);
   });
 
-  it('transitions overall plan status correctly from APPROVED to IN_PROGRESS to AWAITING_COMPLETION_APPROVAL', () => {
+  it('transitions overall plan status correctly from APPROVED to IN_PROGRESS to COMPLETED', () => {
     const initialProgress = {
       totalTasks: 4,
       completedTasks: 0,
@@ -186,7 +186,7 @@ describe('3. Progress Tracker & Status Transitions', () => {
     expect(derivePlanStatus('APPROVED', inProgress)).toBe('IN_PROGRESS');
 
     const completed = { ...initialProgress, completedTasks: 4, pendingTasks: 0, completionPercentage: 100, isComplete: true };
-    expect(derivePlanStatus('IN_PROGRESS', completed)).toBe('AWAITING_COMPLETION_APPROVAL');
+    expect(derivePlanStatus('IN_PROGRESS', completed)).toBe('COMPLETED');
   });
 });
 
@@ -258,6 +258,25 @@ describe('4. Task Generator Idempotency & Rules Synthesis', () => {
     expect(new Set(idTypes).size).toBe(2); // strictly unique
     expect(generated.dependencies.length).toBe(1);
     expect(generated.topologicalOrder.length).toBe(2);
+  });
+
+  it('refuses to generate a task when its prerequisite template is missing', () => {
+    const orphaned = [{
+      taskType: 'PROVISION_LAPTOP' as const,
+      service: 'EQUIPMENT' as const,
+      title: 'Laptop Provision',
+      description: 'Prepare equipment',
+      ownerRole: 'IT' as const,
+      authorityClass: 'ROUTINE' as const,
+      deadlineAnchor: 'START_DATE' as const,
+      deadlineOffsetDays: -1,
+      deadlineBasis: 'BUSINESS_DAYS' as const,
+      leadTimeDays: 0,
+      dependsOnTypes: ['SIGN_EMPLOYMENT_CONTRACT'],
+      isMandatory: true,
+    }];
+    expect(() => generatePlanTasks('plan-orphan', dummyProfile, orphaned, [], 'BASELINE_FALLBACK'))
+      .toThrow('depends on missing task type SIGN_EMPLOYMENT_CONTRACT');
   });
 });
 

@@ -172,6 +172,21 @@ export class OnboardingOrchestrator {
 
     // Stage 2: Deterministic Statutory Floor
     const mandatoryRules = await evaluateRules(profile);
+    const requiredServices = ["DOCUMENTS", "EQUIPMENT", "PAYROLL", "BENEFITS", "TRAINING", "MANAGER"] as const;
+    const missingServices = requiredServices.filter((service) =>
+      profile.employmentType === "CONTRACTOR" && service === "BENEFITS"
+        ? false
+        : !mandatoryRules.some((rule) => rule.service === service),
+    );
+    if (missingServices.length) {
+      const detail = `No eligible demo/approved template exists for: ${missingServices.join(", ")}. Configure the templates before generating this plan.`;
+      try {
+        await prisma.escalation.create({ data: { reasonCode: "MISSING_TEMPLATES", detail, assignedRole: "HR" } });
+      } catch (error) {
+        throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Required templates are missing, and the escalation could not be recorded. No plan was created.", { cause: error });
+      }
+      throw conflict(`Plan generation refused: missing templates for ${missingServices.join(", ")}. An HR escalation was created.`, "MISSING_TEMPLATES");
+    }
 
     // Stage 3 & 4: LLM Proposal or Baseline Fallback
     let generationMode: "LLM_GROUNDED" | "BASELINE_FALLBACK" =
@@ -439,27 +454,19 @@ export class OnboardingOrchestrator {
    * (Guardrail V7: Human Authorization Gate)
    */
   async approvePlan(planId: string, input: ApprovePlanInput) {
-    let plan: any = null;
-    if (isDatabaseOnline()) {
-      try {
-        plan = await prisma.onboardingPlan.findUnique({
-          where: { id: planId },
+    if (!isDatabaseOnline()) {
+      throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The onboarding database is unavailable. Approval was not saved.");
+    }
+    const plan = await prisma.onboardingPlan.findUnique({
+      where: { id: planId },
+      include: {
+        tasks: {
           include: {
-            tasks: {
-              include: {
-                dependencies: true,
-              },
-            },
+            dependencies: true,
           },
-        });
-      } catch {
-        setDatabaseOnline(false);
-      }
-    }
-
-    if (!plan) {
-      plan = IN_MEMORY_PLANS.get(planId);
-    }
+        },
+      },
+    });
 
     if (!plan) throw notFound(`Plan with ID ${planId}`);
 
@@ -558,20 +565,7 @@ export class OnboardingOrchestrator {
 
     const approvedAt = new Date();
 
-    // Update in-memory plan state
-    plan.status = "APPROVED";
-    plan.approvedById = input.actorUserId;
-    plan.approvedAt = approvedAt;
-    for (const t of tasksToApprove) {
-      t.reviewState = "OK";
-      if (dispatchedTaskIds.includes(t.id)) {
-        t.status = "NOT_STARTED";
-      }
-    }
-
-    if (isDatabaseOnline()) {
-      try {
-        await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
           await tx.planTask.updateMany({
             where: { id: { in: tasksToApprove.map((t: any) => t.id) } },
             data: { reviewState: "OK" },
@@ -580,7 +574,7 @@ export class OnboardingOrchestrator {
             where: { id: { in: dispatchedTaskIds } },
             data: { status: "NOT_STARTED" },
           });
-          for (const t of tasksToApprove)
+          for (const t of tasksToApprove.filter((task: any) => dispatchedTaskIds.includes(task.id)))
             await this.initializeDownstreamWorkflow(tx, t, plan.employeeId);
 
           // Update plan status
@@ -617,10 +611,6 @@ export class OnboardingOrchestrator {
             },
           });
         });
-      } catch {
-        setDatabaseOnline(false);
-      }
-    }
 
     return {
       planId,
@@ -644,7 +634,7 @@ export class OnboardingOrchestrator {
           include: { tasks: true },
         });
         if (!plan) throw notFound(`Plan with ID ${planId}`);
-        if (plan.status !== "AWAITING_COMPLETION_APPROVAL") {
+        if (!["AWAITING_COMPLETION_APPROVAL", "COMPLETED"].includes(plan.status)) {
           throw conflict(`Final sign-off is not available while the plan is ${plan.status}.`);
         }
         const progress = calculatePlanProgress(plan.tasks.map((task) => ({
@@ -702,9 +692,14 @@ export class OnboardingOrchestrator {
    */
   private async initializeDownstreamWorkflow(
     tx: Prisma.TransactionClient,
-    task: { id: string; taskType: string; service: string },
+    task: { id: string; taskType: string; service: string; dueDate: Date },
     employeeId: string,
   ) {
+    const employee = await tx.employee.findUnique({
+      where: { id: employeeId },
+      select: { jurisdictionCode: true, employmentType: true, roleFamily: true, workMode: true, startDate: true },
+    });
+    if (!employee) throw notFound("Employee");
     switch (task.service) {
       case "DOCUMENTS":
         await tx.documentRequest.upsert({
@@ -732,29 +727,35 @@ export class OnboardingOrchestrator {
         break;
 
       case "EQUIPMENT": {
+        const categoryByType: Record<string, string> = {
+          PROVISION_LAPTOP: "laptop",
+          PROVISION_PERIPHERALS: "peripheral",
+          PROVISION_MOBILE_DEVICE: "mobile",
+          ISSUE_ACCESS_BADGE: "access",
+        };
+        const category = categoryByType[task.taskType] ?? "laptop";
         const catalogItem = await tx.equipmentCatalog.findFirst({
-          where: { isActive: true },
+          where: { isActive: true, category },
+          orderBy: [{ leadTimeDays: "asc" }, { sku: "asc" }],
         });
-        if (catalogItem) {
-          await tx.equipmentAssignment.upsert({
-            where: { taskId: task.id },
-            create: {
-              taskId: task.id,
-              catalogId: catalogItem.id,
-              status: "REQUESTED",
-            },
-            update: {},
-          });
-        }
+        if (!catalogItem) throw conflict(`No active ${category} equipment catalog item is configured.`);
+        await tx.equipmentAssignment.upsert({
+          where: { taskId: task.id },
+          create: { taskId: task.id, catalogId: catalogItem.id, status: "REQUESTED" },
+          update: {},
+        });
         break;
       }
 
       case "BENEFITS": {
-        const benefitPlan = await tx.benefitPlan.findFirst({
-          where: { isActive: true },
+        if (employee.employmentType === "CONTRACTOR") break;
+        const candidates = await tx.benefitPlan.findMany({
+          where: { isActive: true, OR: [{ jurisdictionCode: employee.jurisdictionCode }, { jurisdictionCode: null }] },
+          orderBy: [{ code: "asc" }],
         });
+        const benefitPlan = candidates.find((candidate) => candidate.jurisdictionCode === employee.jurisdictionCode) ?? candidates.find((candidate) => candidate.jurisdictionCode === null);
         if (benefitPlan) {
-          const now = new Date();
+          const now = new Date(employee.startDate);
           const windowCloses = new Date(
             now.getTime() + benefitPlan.enrollmentWindowDays * 86400000,
           );
@@ -769,29 +770,35 @@ export class OnboardingOrchestrator {
             },
             update: {},
           });
-        }
+        } else throw conflict(`No benefits plan is configured for ${employee.jurisdictionCode}.`);
         break;
       }
 
       case "TRAINING": {
-        const course = await tx.trainingCourse.findFirst({
-          where: { isActive: true },
+        const courses = await tx.trainingCourse.findMany({
+          where: {
+            isActive: true,
+            OR: [
+              { mandatoryForJurisdictions: { has: employee.jurisdictionCode } },
+              { mandatoryForJurisdictions: { isEmpty: true } },
+              { mandatoryForRoles: { has: employee.roleFamily } },
+            ],
+          },
+          orderBy: [{ code: "asc" }],
         });
+        const course = courses.find((item) => item.mandatoryForJurisdictions.includes(employee.jurisdictionCode) || item.mandatoryForRoles.includes(employee.roleFamily)) ?? courses.find((item) => item.mandatoryForJurisdictions.length === 0 && item.mandatoryForRoles.length === 0);
         if (course) {
-          const dueDate = new Date(
-            Date.now() + (course.statutoryDeadlineDays ?? 14) * 86400000,
-          );
           await tx.trainingAssignment.upsert({
             where: { taskId: task.id },
             create: {
               taskId: task.id,
               courseId: course.id,
               status: "ASSIGNED",
-              dueDate,
+              dueDate: task.dueDate,
             },
             update: {},
           });
-        }
+        } else throw conflict(`No eligible training course is configured for ${employee.jurisdictionCode} / ${employee.roleFamily}.`);
         break;
       }
 
@@ -803,11 +810,13 @@ export class OnboardingOrchestrator {
           APPROVE_SYSTEM_ACCESS: "ACCESS_APPROVAL",
           SET_PROBATION_GOALS: "PROBATION_GOALS",
         };
+        const kind = managerKind[task.taskType];
+        if (!kind) throw badRequest(`Unsupported manager task type: ${task.taskType}`);
         await tx.managerTask.upsert({
           where: { taskId: task.id },
           create: {
             taskId: task.id,
-            kind: (managerKind[task.taskType] ?? "DAY_ONE_AGENDA") as any,
+            kind: kind as any,
           },
           update: {},
         });

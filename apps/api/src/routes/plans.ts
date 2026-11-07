@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { prisma, isDatabaseOnline, setDatabaseOnline } from "../db/client.js";
+import { prisma, isDatabaseOnline, isDatabaseConnectivityError, databaseUnavailableError } from "../db/client.js";
 import {
   ListPlansQuerySchema,
   ApprovePlanRequestSchema,
@@ -122,48 +122,30 @@ plansRouter.get(
       let totalItems = 0;
 
       if (isDatabaseOnline()) {
-        try {
-          const [dbItems, count] = await Promise.all([
-            prisma.onboardingPlan.findMany({
-              where,
-              include: {
-                employee: {
-                  select: {
-                    firstName: true,
-                    lastName: true,
-                    jurisdictionCode: true,
-                    startDate: true,
-                  },
-                },
-                tasks: {
-                  select: { status: true, isAtRisk: true, reviewState: true },
+        const [dbItems, count] = await Promise.all([
+          prisma.onboardingPlan.findMany({
+            where,
+            include: {
+              employee: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  jurisdictionCode: true,
+                  startDate: true,
                 },
               },
-              orderBy: { createdAt: "desc" },
-              skip: (q.page - 1) * q.pageSize,
-              take: q.pageSize,
-            }),
-            prisma.onboardingPlan.count({ where }),
-          ]);
-          items = dbItems;
-          totalItems = count;
-        } catch {
-          setDatabaseOnline(false);
-        }
-      }
-
-      if (items.length === 0 && !isDatabaseOnline()) {
-        const { IN_MEMORY_PLANS } =
-          await import("../orchestration/orchestrator.js");
-        let list = Array.from(IN_MEMORY_PLANS.values());
-        if (q.status) {
-          list = list.filter((p) => p.status === q.status);
-        }
-        if (q.employeeId) {
-          list = list.filter((p) => p.employeeId === q.employeeId);
-        }
-        items = list;
-        totalItems = list.length;
+              tasks: {
+                select: { status: true, isAtRisk: true, reviewState: true },
+              },
+            },
+            orderBy: { createdAt: "desc" },
+            skip: (q.page - 1) * q.pageSize,
+            take: q.pageSize,
+          }),
+          prisma.onboardingPlan.count({ where }),
+        ]);
+        items = dbItems;
+        totalItems = count;
       }
 
       res.json({
@@ -190,46 +172,35 @@ plansRouter.get(
     try {
       let plan: any = null;
       if (isDatabaseOnline()) {
-        try {
-          plan = await prisma.onboardingPlan.findUnique({
-            where: { id: req.params.id },
-            include: {
-              employee: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  jurisdictionCode: true,
-                  startDate: true,
-                },
+        plan = await prisma.onboardingPlan.findUnique({
+          where: { id: req.params.id },
+          include: {
+            employee: {
+              select: {
+                firstName: true,
+                lastName: true,
+                jurisdictionCode: true,
+                startDate: true,
               },
-              approvedBy: { select: { email: true } },
-              tasks: {
-                include: {
-                  dependencies: true,
-                  citations: {
-                    include: {
-                      clause: {
-                        include: {
-                          document: { select: { title: true, isMock: true } },
-                        },
+            },
+            approvedBy: { select: { email: true } },
+            tasks: {
+              include: {
+                dependencies: true,
+                citations: {
+                  include: {
+                    clause: {
+                      include: {
+                        document: { select: { title: true, isMock: true } },
                       },
                     },
                   },
                 },
-                orderBy: [{ sortOrder: "asc" }, { dueDate: "asc" }],
               },
+              orderBy: [{ sortOrder: "asc" }, { dueDate: "asc" }],
             },
-          });
-        } catch {
-          setDatabaseOnline(false);
-          plan = null;
-        }
-      }
-
-      if (!plan) {
-        const { IN_MEMORY_PLANS } =
-          await import("../orchestration/orchestrator.js");
-        plan = IN_MEMORY_PLANS.get(req.params.id!);
+          },
+        });
       }
 
       if (!plan) throw notFound("Plan");
@@ -331,24 +302,14 @@ plansRouter.get(
       let plan: any = null;
       let employee: any = null;
       if (isDatabaseOnline()) {
-        try {
-          plan = await prisma.onboardingPlan.findUnique({
-            where: { id: req.params.id },
-            include: {
-              employee: { include: { department: true } },
-              tasks: true,
-            },
-          });
-          if (plan) employee = plan.employee;
-        } catch {
-          setDatabaseOnline(false);
-        }
-      }
-
-      if (!plan) {
-        const { IN_MEMORY_PLANS } =
-          await import("../orchestration/orchestrator.js");
-        plan = IN_MEMORY_PLANS.get(req.params.id!);
+        plan = await prisma.onboardingPlan.findUnique({
+          where: { id: req.params.id },
+          include: {
+            employee: { include: { department: true } },
+            tasks: true,
+          },
+        });
+        if (plan) employee = plan.employee;
       }
       if (!plan) throw notFound("Plan");
 
@@ -378,24 +339,14 @@ plansRouter.get(
       let plan: any = null;
       let employee: any = null;
       if (isDatabaseOnline()) {
-        try {
-          plan = await prisma.onboardingPlan.findUnique({
-            where: { id: req.params.id },
-            include: {
-              employee: { include: { department: true } },
-              tasks: true,
-            },
-          });
-          if (plan) employee = plan.employee;
-        } catch {
-          setDatabaseOnline(false);
-        }
-      }
-
-      if (!plan) {
-        const { IN_MEMORY_PLANS } =
-          await import("../orchestration/orchestrator.js");
-        plan = IN_MEMORY_PLANS.get(req.params.id!);
+        plan = await prisma.onboardingPlan.findUnique({
+          where: { id: req.params.id },
+          include: {
+            employee: { include: { department: true } },
+            tasks: true,
+          },
+        });
+        if (plan) employee = plan.employee;
       }
       if (!plan) throw notFound("Plan");
 
@@ -454,9 +405,9 @@ plansRouter.get(
             include: { task: { select: { title: true } } },
             orderBy: { createdAt: "desc" },
           });
-        } catch {
-          setDatabaseOnline(false);
-          findings = [];
+        } catch (error) {
+          if (isDatabaseConnectivityError(error)) throw databaseUnavailableError(error);
+          throw error;
         }
       }
 
@@ -504,9 +455,9 @@ plansRouter.get(
             include: { actor: { select: { email: true } } },
             orderBy: { createdAt: "desc" },
           });
-        } catch {
-          setDatabaseOnline(false);
-          events = [];
+        } catch (error) {
+          if (isDatabaseConnectivityError(error)) throw databaseUnavailableError(error);
+          throw error;
         }
       }
 
