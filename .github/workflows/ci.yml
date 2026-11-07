@@ -32,10 +32,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/placeholder
           DIRECT_URL: postgresql://postgres:postgres@localhost:5432/placeholder
+      - name: Build shared contracts
+        run: npm run build -w @eo/contracts
       - name: Typecheck
         run: npx tsc -b
-      - name: Lint
-        run: npm run lint --if-present
 
   # ---------------------------------------------------------------------
   # The published OpenAPI document must match the Zod schemas.

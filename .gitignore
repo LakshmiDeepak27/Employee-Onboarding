@@ -10,3 +10,4 @@ coverage/
 .idea/
 uploads/
 packages/db/generated/
+*.tsbuildinfo
