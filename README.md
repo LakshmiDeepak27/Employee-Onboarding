@@ -10,10 +10,25 @@ CLYORA coordinates employee onboarding across HR, managers, IT, finance, and emp
 | --- | --- |
 | Video demonstration | [YouTube Video (https://youtu.be/sUSnpZo5RgE)](https://youtu.be/sUSnpZo5RgE) |
 | Loom presentation | [Loom Recording](https://www.loom.com/share/57e37b5edbe94a6688d5ce0363482b9b) |
+| Presentation slides | [CLYORA Presentation Slides (PPTX)](output/presentations/CLYORA_Employee_Onboarding_Presentation.pptx) |
 | Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
-| Slide presentation | [CLYORA_Employee_Onboarding_5_Slides.pptx](output/presentations/CLYORA_Employee_Onboarding_5_Slides.pptx) |
-| Video script & brief | [CLYORA Video Script PDF](output/pdf/CLYORA_AI_Innovation_Challenge_10_Minute_Video_Script.pdf) |
 | API reference (local) | `http://localhost:4000/docs` after starting the API |
+
+## Presentation
+
+![CLYORA Presentation Slide 1](docs/assets/clyora-slide-1.png)
+
+> 📊 **[Download the full presentation deck (PPTX)](output/presentations/CLYORA_Employee_Onboarding_Presentation.pptx)**
+
+### Team
+- Lakshmi Deepak Neeli
+- Guna Vardhan Dodla
+- Himanshu Himanshu
+- Teja Kaluguri
+- Trisha V
+- Shruthi Keerthana Srustu
+- Erla Sai Dinesh Yadav
+- J Neelavathi
 
 ## Video Demonstration
 
