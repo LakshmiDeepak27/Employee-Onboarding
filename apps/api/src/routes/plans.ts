@@ -69,7 +69,7 @@ function presentTask(t: any) {
     planId: t.planId,
     taskType: t.taskType,
     service: t.service,
-    title: t.title.replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "").replace(/\s*\(demo\)\s*$/i, "").trim(),
+    title: t.title.replace(/\b(?:DEMO|SAMPLE)\s*[—–:-]\s*/gi, "").replace(/\s*\(demo\)\s*$/i, "").replace(/\s{2,}/g, " ").trim(),
     description: t.description,
     ownerRole: t.ownerRole,
     assigneeUserId: t.assigneeUserId,

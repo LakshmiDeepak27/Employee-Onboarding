@@ -671,7 +671,7 @@ workflowRouter.post(
 // GET /api/v1/tasks/:taskId/payroll
 workflowRouter.get(
   "/tasks/:taskId/payroll",
-  requirePermission("payroll.read"),
+  requirePermission("payroll.read", { target: (req) => employeeIdForTask(req.params.taskId!) }),
   async (req, res, next) => {
     try {
       const payroll = await prisma.payrollSetup.findUnique({
@@ -702,7 +702,7 @@ workflowRouter.get(
 // PUT /api/v1/tasks/:taskId/payroll
 workflowRouter.put(
   "/tasks/:taskId/payroll",
-  requirePermission("payroll.write"),
+  requirePermission("payroll.write", { target: (req) => employeeIdForTask(req.params.taskId!) }),
   validate({ body: UpsertPayrollSetupRequestSchema }),
   async (req, res, next) => {
     try {
@@ -723,6 +723,8 @@ workflowRouter.put(
         : undefined;
       const nationalIdLast4 = b.nationalId ? b.nationalId.slice(-4) : undefined;
       const existing = await prisma.payrollSetup.findUnique({ where: { taskId: task.id } });
+      if (existing?.status === "VERIFIED")
+        throw conflict("This payroll setup is already verified. Contact HR if it needs to be reopened.");
       const taxFormReceived = b.taxFormReceived ?? Boolean(existing?.taxFormReceivedAt);
       const hasBankDetails = Boolean(bankLast4 ?? existing?.bankAccountLast4);
       const setupStatus = !taxFormReceived
@@ -790,7 +792,7 @@ workflowRouter.put(
 // POST /api/v1/tasks/:taskId/payroll/verify
 workflowRouter.post(
   "/tasks/:taskId/payroll/verify",
-  requirePermission("payroll.verify"),
+  requirePermission("payroll.verify", { target: (req) => employeeIdForTask(req.params.taskId!) }),
   validate({ body: VerifyPayrollRequestSchema }),
   async (req, res, next) => {
     try {
@@ -1208,7 +1210,7 @@ workflowRouter.get(
           employeeName: `${m.plan.employee.firstName} ${m.plan.employee.lastName}`,
           planId: m.planId,
           planStatus: m.plan.status,
-          taskTitle: m.title.replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "").replace(/\s*\(demo\)\s*$/i, "").trim(),
+          taskTitle: m.title.replace(/\b(?:DEMO|SAMPLE)\s*[—–:-]\s*/gi, "").replace(/\s*\(demo\)\s*$/i, "").replace(/\s{2,}/g, " ").trim(),
           taskDescription: m.description?.replace(/^Demonstration workflow template\. HR must review and replace it with approved company content before real onboarding\./i, "Starter task for the onboarding workflow. Confirm details with HR before completion."),
           taskStatus: m.status,
           dueDate: m.dueDate.toISOString().slice(0, 10),

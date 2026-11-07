@@ -194,6 +194,8 @@ export const ROLES: readonly RoleDef[] = [
       "document.read",
       "document.upload",
       "equipment.receipt",
+      "payroll.read",
+      "payroll.write",
       "benefit.read",
       "benefit.enrol",
       "training.read",

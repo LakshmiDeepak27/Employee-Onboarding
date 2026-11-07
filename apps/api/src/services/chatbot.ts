@@ -53,14 +53,15 @@ function sourceAnswer(
     document: { title: string; sourceUri: string };
   }>,
 ): ChatResponse {
+  const excerpt = (body: string) => body.length > 500 ? `${body.slice(0, 500).trimEnd()}…` : body;
   return {
     answer:
       'I found these approved policy sources relevant to your question:\n\n' +
-      clauses.map((clause) => `${clause.heading ?? clause.document.title}: ${clause.body}`).join('\n\n'),
+      clauses.map((clause) => `${clause.heading ?? clause.document.title}: ${excerpt(clause.body)}`).join('\n\n'),
     citations: clauses.map((clause) => ({
       clauseId: clause.id,
       heading: clause.heading,
-      quotedText: clause.body.slice(0, 600),
+      quotedText: excerpt(clause.body),
       sourceUri: clause.document.sourceUri,
     })),
     grounded: true,

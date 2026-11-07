@@ -10,7 +10,7 @@ interface ChatMessage {
   response?: ChatResponse;
 }
 
-export function ClyoraSparkleIcon({ size = 18 }: { size?: number }) {
+export function ClyoraBrandIcon({ size = 18 }: { size?: number }) {
   return (
     <svg
       width={size}
@@ -18,7 +18,7 @@ export function ClyoraSparkleIcon({ size = 18 }: { size?: number }) {
       viewBox="0 0 64 64"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className="clyora-sparkle-svg"
+      className="clyora-brand-mark"
       aria-hidden="true"
     >
       <path d="M49 17.5C44.6 13.4 39 11 32.7 11 19.6 11 9 20.5 9 32s10.6 21 23.7 21c6.3 0 11.9-2.4 16.3-6.5" stroke="currentColor" strokeLinecap="round" strokeWidth="10" />
@@ -101,7 +101,7 @@ export function ChatWidget() {
           aria-label="Ask CLYORA AI Assistant"
         >
           <span className="clyora-pill-icon-circle" aria-hidden="true">
-            <ClyoraSparkleIcon size={17} />
+            <ClyoraBrandIcon size={17} />
           </span>
           <span className="clyora-pill-title">Ask CLYORA</span>
           <span className="clyora-pill-badge">AI Assistant</span>
@@ -111,12 +111,12 @@ export function ChatWidget() {
           <header className="clyora-chat-header">
             <div className="clyora-chat-header-identity">
               <span className="clyora-chat-avatar" aria-hidden="true">
-                <ClyoraSparkleIcon size={16} />
+                <ClyoraBrandIcon size={16} />
               </span>
               <div>
                 <strong className="clyora-chat-name">Ask CLYORA</strong>
                 <span className="clyora-chat-status">
-                  <span className="clyora-online-dot" /> AI Onboarding Assistant
+                  <span className="clyora-online-dot" /> Policy assistant · grounded answers
                 </span>
               </div>
             </div>
@@ -182,10 +182,11 @@ export function ChatWidget() {
 
               {busy && (
                 <div className="clyora-msg clyora-msg-assistant">
-                  <div className="clyora-msg-bubble clyora-msg-typing">
+                  <div className="clyora-msg-bubble clyora-msg-typing" role="status" aria-label="Searching approved policy sources">
                     <span className="typing-dot" />
                     <span className="typing-dot" />
                     <span className="typing-dot" />
+                    <span className="clyora-typing-label">Searching approved sources…</span>
                   </div>
                 </div>
               )}

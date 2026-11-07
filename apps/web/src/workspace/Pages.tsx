@@ -1195,20 +1195,23 @@ export function Tasks() {
   const activePlans = (plans.data?.items ?? []).filter(
     (plan) => !["COMPLETED", "CANCELLED", "REFUSED"].includes(plan.status),
   );
-  const people = [...new Map(activePlans.map((plan) => [plan.employeeId, plan.employeeName])).entries()];
-  const requestedEmployeeId = params.get("employeeId");
-  const selectedEmployeeId = requestedEmployeeId && people.some(([id]) => id === requestedEmployeeId)
-    ? requestedEmployeeId
-    : people[0]?.[0] ?? "";
+  const latestPlanByEmployee = new Map<string, (typeof activePlans)[number]>();
+  for (const plan of activePlans) {
+    if (!latestPlanByEmployee.has(plan.employeeId)) latestPlanByEmployee.set(plan.employeeId, plan);
+  }
+  const people = [...latestPlanByEmployee.values()];
+  const requestedPlanId = params.get("planId");
+  const selectedPlan = people.find((plan) => plan.id === requestedPlanId) ?? people[0];
+  const selectedPlanId = selectedPlan?.id ?? "";
   const q = useQuery({
-    queryKey: ["tasks", selectedEmployeeId, params.get("status")],
+    queryKey: ["tasks", selectedPlanId, params.get("status")],
     queryFn: () =>
       api.tasks.list({
         pageSize: 100,
-        ...(selectedEmployeeId ? { employeeId: selectedEmployeeId } : {}),
+        ...(selectedPlanId ? { planId: selectedPlanId } : {}),
         ...(params.get("status") ? { status: params.get("status")! } : {}),
       }),
-    enabled: !!selectedEmployeeId,
+    enabled: !!selectedPlanId,
   });
   const search = (params.get("search") ?? "").toLowerCase();
   const items =
@@ -1225,14 +1228,14 @@ export function Tasks() {
             <span>Employee</span>
             <select
               aria-label="Filter work by employee"
-              value={selectedEmployeeId}
+              value={selectedPlanId}
               disabled={plans.isPending || !people.length}
               onChange={(e) => setParams((current) => {
-                current.set("employeeId", e.target.value);
+                current.set("planId", e.target.value);
                 return current;
               })}
             >
-              {people.map(([id, name]) => <option value={id} key={id}>{name}</option>)}
+              {people.map((plan) => <option value={plan.id} key={plan.id}>{plan.employeeName}</option>)}
             </select>
           </label>
           <label className="search-box">
@@ -1278,11 +1281,11 @@ export function Tasks() {
           <p className="notice danger">Unable to load active onboarding plans.</p>
         ) : plans.isPending ? (
           <div className="loading" role="status"><span className="spinner" />Loading active onboarding…</div>
-        ) : !selectedEmployeeId ? (
+        ) : !selectedPlanId ? (
           <Empty title="No active onboarding plans" text="Create an employee profile and generate a plan to see work here." />
         ) : (
           <>
-            <div className="toolbar"><span className="muted">{items.length} tasks shown for {people.find(([id]) => id === selectedEmployeeId)?.[1] ?? "this employee"}</span></div>
+            <div className="toolbar"><span className="muted">{items.length} tasks shown for {selectedPlan?.employeeName ?? "this employee"}’s current onboarding plan.</span></div>
             <QueryState query={q}><TaskRows tasks={items} /></QueryState>
           </>
         )}

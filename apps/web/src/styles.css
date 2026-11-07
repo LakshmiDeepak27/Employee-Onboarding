@@ -2865,7 +2865,7 @@ table td > small {
   flex-shrink: 0;
 }
 
-.clyora-sparkle-svg {
+.clyora-brand-mark {
   display: block;
 }
 
@@ -2960,6 +2960,8 @@ table td > small {
   font-size: 11px;
   color: #64748b;
 }
+.clyora-msg-typing { display: flex; align-items: center; gap: 5px; }
+.clyora-typing-label { margin-left: 5px; color: #64748b; font-size: 11px; }
 
 .clyora-online-dot {
   width: 6px;

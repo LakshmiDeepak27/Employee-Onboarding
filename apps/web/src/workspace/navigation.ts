@@ -293,6 +293,14 @@ export const navigation: Record<Workspace, NavigationItem[]> = {
       "document.read",
     ),
     item(
+      "payroll",
+      "Payroll setup",
+      "Submit your tax and bank setup for HR or Finance review.",
+      FileCheck2,
+      "Workspace",
+      "payroll.read",
+    ),
+    item(
       "training",
       "Training",
       "Review and complete your assigned learning.",

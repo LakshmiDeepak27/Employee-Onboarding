@@ -376,6 +376,7 @@ export const ListTasksQuerySchema = PaginationQuery.extend({
   status: TaskStatusEnum.optional(),
   ownerRole: OwnerRoleEnum.optional(),
   assigneeUserId: Uuid.optional(),
+  planId: Uuid.optional(),
   employeeId: Uuid.optional(),
   dueBefore: IsoDate.optional(),
   atRiskOnly: z.coerce.boolean().default(false),

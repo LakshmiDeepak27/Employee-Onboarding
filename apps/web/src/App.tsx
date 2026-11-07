@@ -219,6 +219,7 @@ export function App() {
                   )}
                   {w === "employee" && (
                     <>
+                      <Route path="payroll" element={<Payroll />} />
                       <Route
                         path="training"
                         element={<ServicePage service="training" />}

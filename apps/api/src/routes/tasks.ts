@@ -10,13 +10,16 @@ export const tasksRouter = Router();
 tasksRouter.use(authenticate);
 
 function cleanTaskTitle(title: string) {
-  return title.replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "").replace(/\s*\(demo\)\s*$/i, "").trim();
+  return title.replace(/\b(?:DEMO|SAMPLE)\s*[—–:-]\s*/gi, "").replace(/\s*\(demo\)\s*$/i, "").replace(/\s{2,}/g, " ").trim();
 }
 
 function presentTask(t: any) {
   return {
     id: t.id,
     planId: t.planId,
+    employeeName: t.plan?.employee
+      ? `${t.plan.employee.firstName} ${t.plan.employee.lastName}`
+      : null,
     taskType: t.taskType,
     service: t.service,
     title: cleanTaskTitle(t.title),
@@ -79,6 +82,7 @@ tasksRouter.get(
         ...(q.status ? { status: q.status } : {}),
         ...(q.ownerRole ? { ownerRole: q.ownerRole } : {}),
         ...(q.assigneeUserId ? { assigneeUserId: q.assigneeUserId } : {}),
+        ...(q.planId ? { planId: q.planId } : {}),
         ...(q.employeeId
           ? { AND: [{ plan: { employeeId: q.employeeId } }] }
           : {}),
@@ -93,6 +97,7 @@ tasksRouter.get(
           prisma.planTask.findMany({
             where,
             include: {
+              plan: { select: { employee: { select: { firstName: true, lastName: true } } } },
               assignee: { select: { email: true } },
               dependencies: true,
               citations: {

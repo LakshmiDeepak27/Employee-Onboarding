@@ -55,7 +55,7 @@ const BASE = "/api/v1";
 let accessToken: string | null = null;
 
 export function cleanTaskTitle(title: string) {
-  return title.replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "").replace(/\s*\(demo\)\s*$/i, "").trim();
+  return title.replace(/\b(?:DEMO|SAMPLE)\s*[—–:-]\s*/gi, "").replace(/\s*\(demo\)\s*$/i, "").replace(/\s{2,}/g, " ").trim();
 }
 
 export function setAccessToken(token: string | null) {

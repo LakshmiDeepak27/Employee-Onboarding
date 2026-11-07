@@ -924,7 +924,7 @@ export function Payroll() {
             <option value="">Select a payroll task</option>
             {tasks.data?.items.map((t) => (
               <option key={t.id} value={t.id}>
-                {displayTaskTitle(t.title)} · {t.dueDate} ·{" "}
+                {(t as typeof t & { employeeName?: string | null }).employeeName ? `${(t as typeof t & { employeeName?: string | null }).employeeName} · ` : ""}{displayTaskTitle(t.title)} · {t.dueDate} ·{" "}
                 {t.id.slice(0, 8)}
               </option>
             ))}
@@ -941,7 +941,7 @@ export function Payroll() {
               <ol className="payroll-progress" aria-label="Payroll setup progress">
                 <li className={taxComplete ? "complete" : "current"}><span>1</span><div><strong>Tax form</strong><small>{taxComplete ? "Received" : "Required"}</small></div></li>
                 <li className={bankComplete ? "complete" : taxComplete ? "current" : ""}><span>2</span><div><strong>Bank details</strong><small>{bankComplete ? "Saved securely" : "Required"}</small></div></li>
-                <li className={payrollVerified ? "complete" : bankComplete && taxComplete ? "current" : ""}><span>3</span><div><strong>Review</strong><small>{payrollVerified ? "Verified" : "HR / Finance"}</small></div></li>
+                <li className={payrollVerified ? "complete" : bankComplete && taxComplete ? "current" : ""}><span>3</span><div><strong>Review</strong><small>{payrollVerified ? "Verified" : "HR approval"}</small></div></li>
               </ol>
               <form
                 key={id}
@@ -964,6 +964,7 @@ export function Payroll() {
                     <select
                       name="payFrequency"
                       defaultValue={setup.data?.payFrequency ?? "MONTHLY"}
+                      disabled={payrollVerified}
                     >
                       {["WEEKLY", "BIWEEKLY", "SEMIMONTHLY", "MONTHLY"].map(
                         (s) => (
@@ -976,6 +977,7 @@ export function Payroll() {
                     Currency
                     <input
                       name="salaryCurrency"
+                      disabled={payrollVerified}
                       required
                       minLength={3}
                       maxLength={3}
@@ -987,6 +989,7 @@ export function Payroll() {
                     Tax form type
                     <input
                       name="taxFormType"
+                      disabled={payrollVerified}
                       required
                       defaultValue={setup.data?.taxFormType ?? ""}
                     />
@@ -996,6 +999,7 @@ export function Payroll() {
                     <input
                       name="bankAccountNumber"
                       type="password"
+                      disabled={payrollVerified}
                       autoComplete="off"
                       pattern="[0-9]{6,20}"
                       placeholder={
@@ -1009,6 +1013,7 @@ export function Payroll() {
                     <input
                       name="taxFormReceived"
                       type="checkbox"
+                      disabled={payrollVerified}
                       defaultChecked={!!setup.data?.taxFormReceivedAt}
                     />
                     Tax form received and checked
@@ -1021,8 +1026,8 @@ export function Payroll() {
                     save.isSuccess ? "Payroll details saved." : undefined
                   }
                 />
-                <button className="button secondary" disabled={save.isPending}>
-                  {save.isPending ? "Saving payroll details…" : "Save payroll details"}
+                <button className="button secondary" disabled={save.isPending || payrollVerified}>
+                  {save.isPending ? "Saving payroll details…" : payrollVerified ? "Payroll details locked after verification" : "Save payroll details"}
                 </button>
               </form>
               {canVerify ? (
@@ -1038,7 +1043,7 @@ export function Payroll() {
                   </button>
                 </>
               ) : (
-                <p className="notice">Payroll details are visible to you, but only authorized HR or Finance reviewers can verify them.</p>
+                <p className="notice">Payroll details are visible to you, but only an authorized HR administrator can verify them.</p>
               )}
             </div>
           </QueryState>
