@@ -56,6 +56,11 @@ coverage/
 *.sln
 *.sw?
 
+# Temporary and generated files
+tmp/
+.codex/
+*.ndjson
+
 # OS files
 .DS_Store
 .DS_Store?

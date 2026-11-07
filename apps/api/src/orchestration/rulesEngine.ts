@@ -279,6 +279,12 @@ export async function evaluateRules(
   // If templates exist in DB, map them
   if (dbTemplates.length > 0) {
     for (const t of dbTemplates) {
+      // The current workspace workflow is intentionally limited to HR and
+      // Manager ownership. Ignored templates must not suppress the built-in
+      // HR/Manager baseline for the same task type.
+      if (t.defaultOwnerRole !== "HR" && t.defaultOwnerRole !== "MANAGER") {
+        continue;
+      }
       // Check employment type filter
       if (
         t.employmentTypes.length > 0 &&
@@ -313,11 +319,13 @@ export async function evaluateRules(
     }
   }
 
-  // 2. Fill the non-legal operational floor only. Legal, payroll, benefits, and
-  // compliance obligations must come from approved organization policy/templates.
+  // 2. Fill the small HR + Manager workflow floor. Other roles/services are
+  // intentionally excluded from generated plans for the current presentation.
+  // Legal, payroll, benefits, and compliance obligations still require approved
+  // organization policy/templates and are not invented here.
   const safeOperationalTypes = new Set([
-    "PROVISION_LAPTOP",
-    "CREATE_SYSTEM_ACCOUNTS",
+    "COLLECT_ID_PROOF",
+    "COLLECT_ADDRESS_PROOF",
     "PREPARE_DAY_ONE_AGENDA",
     "ASSIGN_BUDDY",
     "SCHEDULE_INTRO_MEETINGS",

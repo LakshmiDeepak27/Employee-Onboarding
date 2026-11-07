@@ -219,7 +219,7 @@ plansRouter.get(
         tasks: (plan.tasks ?? []).map(presentTask),
         degradedReason:
           plan.generationMode === "BASELINE_FALLBACK"
-            ? "Generated from task templates statutory baseline."
+            ? "AI was not used for this plan; it was built from configured task templates."
             : null,
         updatedAt: safeIsoString(plan.updatedAt),
       });

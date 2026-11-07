@@ -29,6 +29,12 @@ export interface RequestMeta {
   userAgent?: string | undefined;
 }
 
+/** LOCKED with no expiry is an administrative/offboarding lock. */
+function isAccountUnavailable(status: string, lockedUntil: Date | null | undefined) {
+  return status === "SUSPENDED" ||
+    (status === "LOCKED" && (!lockedUntil || lockedUntil > new Date()));
+}
+
 async function recordAuthEvent(input: {
   userId?: string | null;
   email?: string | null;
@@ -75,6 +81,7 @@ async function buildSession(
           id: true,
           email: true,
           status: true,
+          lockedUntil: true,
           mustChangePassword: true,
           tokenVersion: true,
           lastLoginAt: true,
@@ -89,6 +96,9 @@ async function buildSession(
   }
 
   if (!user) throw unauthenticated("User not found");
+  if (isAccountUnavailable(user.status, user.lockedUntil)) {
+    throw unauthenticated("This account is locked or suspended.", "ACCOUNT_LOCKED");
+  }
 
   const roles = user.userRoles.map((r: any) => r.role.key);
   const access = signAccessToken({
@@ -256,7 +266,7 @@ export async function login(
     );
   }
 
-  if (user.status === "SUSPENDED") {
+  if (user.status === "SUSPENDED" || (user.status === "LOCKED" && !user.lockedUntil)) {
     await recordAuthEvent({
       userId: user.id,
       email,
@@ -387,7 +397,7 @@ export async function loginWithOidc(subject: string, email: string, meta: Reques
     );
   }
 
-  if (user.status === "SUSPENDED") {
+  if (isAccountUnavailable(user.status, user.lockedUntil)) {
     await recordAuthEvent({
       userId: user.id,
       email: normalizedEmail,
@@ -419,7 +429,7 @@ export async function loginWithOidc(subject: string, email: string, meta: Reques
       lastLoginAt: new Date(),
       failedLoginCount: 0,
       lockedUntil: null,
-      status: user.status === "INVITED" ? "ACTIVE" : user.status,
+      status: user.status === "INVITED" || user.status === "LOCKED" ? "ACTIVE" : user.status,
     },
   });
   await recordAuthEvent({ userId: user.id, email: normalizedEmail, type: "LOGIN_SUCCESS", success: true, meta });
@@ -435,7 +445,7 @@ export async function acceptInvite(token: string, newPassword: string, meta: Req
   if (!user || !user.inviteExpiresAt || user.inviteExpiresAt <= new Date()) {
     throw unauthenticated("Invitation is invalid or expired", "TOKEN_INVALID");
   }
-  if (user.status === "SUSPENDED" || (user.lockedUntil && user.lockedUntil > new Date())) {
+  if (isAccountUnavailable(user.status, user.lockedUntil)) {
     throw unauthenticated("Account is suspended or locked");
   }
   await prisma.user.update({

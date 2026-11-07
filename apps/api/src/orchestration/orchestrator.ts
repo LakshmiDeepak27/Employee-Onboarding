@@ -171,22 +171,20 @@ export class OnboardingOrchestrator {
       };
     }
 
-    // Stage 2: Deterministic Statutory Floor
+    // Stage 2: Deterministic HR and Manager task floor
     const mandatoryRules = await evaluateRules(profile);
-    const requiredServices = ["DOCUMENTS", "EQUIPMENT", "PAYROLL", "BENEFITS", "TRAINING", "MANAGER"] as const;
-    const missingServices = requiredServices.filter((service) =>
-      profile.employmentType === "CONTRACTOR" && service === "BENEFITS"
-        ? false
-        : !mandatoryRules.some((rule) => rule.service === service),
+    const requiredOwners = ["HR", "MANAGER"] as const;
+    const missingOwners = requiredOwners.filter((ownerRole) =>
+      !mandatoryRules.some((rule) => rule.ownerRole === ownerRole),
     );
-    if (missingServices.length) {
-      const detail = `No eligible approved template exists for: ${missingServices.join(", ")}. Configure the templates before generating this plan.`;
+    if (missingOwners.length) {
+      const detail = `No eligible task template exists for: ${missingOwners.join(", ")}. Configure the templates before generating this plan.`;
       try {
         await prisma.escalation.create({ data: { reasonCode: "MISSING_TEMPLATES", detail, assignedRole: "HR" } });
       } catch (error) {
         throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Required templates are missing, and the escalation could not be recorded. No plan was created.", { cause: error });
       }
-      throw conflict(`Plan generation refused: missing templates for ${missingServices.join(", ")}. An HR escalation was created.`, "MISSING_TEMPLATES");
+      throw conflict(`Plan generation refused: missing templates for ${missingOwners.join(", ")}. An HR escalation was created.`, "MISSING_TEMPLATES");
     }
 
     // Stage 3 & 4: LLM Proposal or Baseline Fallback

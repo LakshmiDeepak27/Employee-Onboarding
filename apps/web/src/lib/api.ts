@@ -206,6 +206,15 @@ export const api = {
   },
 
   employees: {
+    managers: () =>
+      request<{
+        id: string;
+        firstName: string;
+        lastName: string;
+        jobTitle: string;
+        departmentName: string | null;
+        email: string;
+      }[]>("/employees/managers"),
     list: (params: Record<string, string | number> = {}) =>
       request<{
         items: Employee[];

@@ -40,6 +40,7 @@ function safeIsoString(d: any): string {
 }
 
 function presentSummary(e: any) {
+  const latestPlan = e.plans?.[0] ?? null;
   return {
     id: e.id,
     employeeNumber: e.employeeNumber,
@@ -51,7 +52,12 @@ function presentSummary(e: any) {
     employmentType: e.employmentType,
     startDate: safeIsoDate(e.startDate),
     status: e.status,
-    activePlanId: e.plans?.[0]?.id ?? null,
+    activePlanId:
+      latestPlan && !["COMPLETED", "REFUSED"].includes(latestPlan.status)
+        ? latestPlan.id
+        : null,
+    latestPlanId: latestPlan?.id ?? null,
+    latestPlanStatus: latestPlan?.status ?? null,
   };
 }
 
@@ -131,8 +137,9 @@ employeesRouter.get(
               include: {
                 department: { select: { name: true } },
                 plans: {
-                  where: { status: { notIn: ["REFUSED", "COMPLETED"] } },
-                  select: { id: true },
+                  where: { status: { not: "REFUSED" } },
+                  select: { id: true, status: true },
+                  orderBy: { createdAt: "desc" },
                   take: 1,
                 },
               },
@@ -201,6 +208,28 @@ employeesRouter.post(
       let employee: any = null;
       if (isDatabaseOnline()) {
         try {
+          if (!b.managerId) {
+            throw new AppError(400, "VALIDATION_FAILED", "Select a reporting manager so the new employee appears in that manager's team workspace.");
+          }
+          const managerProfile = await prisma.employee.findUnique({
+            where: { id: b.managerId },
+            select: { id: true, userId: true },
+          });
+          if (!managerProfile?.userId) {
+            throw new AppError(400, "VALIDATION_FAILED", "The selected manager does not have a linked CLYORA account. Link the manager account before creating this employee.");
+          }
+          const managerAccount = await prisma.user.findFirst({
+            where: {
+              id: managerProfile.userId,
+              status: "ACTIVE",
+              userRoles: { some: { role: { key: { in: ["manager", "hr_admin"] } } } },
+            },
+            select: { id: true },
+          });
+          if (!managerAccount) {
+            throw new AppError(400, "VALIDATION_FAILED", "The selected reporting manager must have the manager role in CLYORA.");
+          }
+
           // Check personalEmail uniqueness
           const existing = await prisma.employee.findFirst({
             where: { personalEmail: b.personalEmail },
@@ -238,7 +267,7 @@ employeesRouter.post(
             },
           });
         } catch (err: any) {
-          if (err.status === 409) throw err;
+          if (err instanceof AppError && err.status < 500) throw err;
           setDatabaseOnline(false);
           employee = null;
         }
@@ -263,6 +292,51 @@ employeesRouter.post(
     }
   },
 );
+// GET /api/v1/employees/managers
+// Only linked manager/HR identities can be assigned. HR staff may also be a
+// reporting manager, and every option maps directly to an employee profile.
+employeesRouter.get(
+  "/managers",
+  requirePermission("employee.create"),
+  async (_req, res, next) => {
+    try {
+      if (!isDatabaseOnline()) {
+        throw new AppError(503, "UPSTREAM_UNAVAILABLE", "Manager accounts could not be loaded because the employee database is unavailable.");
+      }
+      const managerUsers = await prisma.user.findMany({
+        where: {
+          status: "ACTIVE",
+          userRoles: { some: { role: { key: { in: ["manager", "hr_admin"] } } } },
+          employee: { isNot: null },
+        },
+        select: {
+          id: true,
+          email: true,
+          employee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              jobTitle: true,
+              department: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { email: "asc" },
+      });
+      res.json(managerUsers.flatMap((user) => user.employee ? [{
+        id: user.employee.id,
+        firstName: user.employee.firstName,
+        lastName: user.employee.lastName,
+        jobTitle: user.employee.jobTitle,
+        departmentName: user.employee.department?.name ?? null,
+        email: user.email,
+      }] : []));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 // GET /api/v1/employees/:id
 employeesRouter.get(
   "/:id",
@@ -278,8 +352,9 @@ employeesRouter.get(
             department: { select: { name: true } },
             manager: { select: { firstName: true, lastName: true } },
             plans: {
-              where: { status: { notIn: ["REFUSED", "COMPLETED"] } },
-              select: { id: true },
+              where: { status: { not: "REFUSED" } },
+              select: { id: true, status: true },
+              orderBy: { createdAt: "desc" },
               take: 1,
             },
           },
@@ -480,7 +555,10 @@ employeesRouter.post(
         return user.id;
       });
 
-      const keycloakUsername = (employee.workEmail?.split("@")[0] || employee.personalEmail.split("@")[0] || "employee").toLowerCase();
+      // Employees sign in with the CLYORA work identity (e.g. alex@clyora).
+      // Keep the real personal email as Keycloak's verified email so it can
+      // receive the activation message and map the OIDC identity to CLYORA.
+      const keycloakUsername = (employee.workEmail || employee.personalEmail.split("@")[0] || "employee").toLowerCase();
       let activationEmailSent = false;
       try {
         await provisionKeycloakUserAndSendActivation({

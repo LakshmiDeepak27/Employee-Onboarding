@@ -39,6 +39,7 @@ declare module 'lucide-react' {
   export const LayoutDashboard: LucideIcon;
   export const ListChecks: LucideIcon;
   export const LogOut: LucideIcon;
+  export const MapPin: LucideIcon;
   export const Menu: LucideIcon;
   export const Minus: LucideIcon;
   export const Network: LucideIcon;
@@ -60,4 +61,8 @@ declare module 'lucide-react' {
   export const Workflow: LucideIcon;
   export const X: LucideIcon;
   export const Bot: LucideIcon;
+  export const Mic: LucideIcon;
+  export const MicOff: LucideIcon;
+  export const Volume2: LucideIcon;
+  export const VolumeX: LucideIcon;
 }

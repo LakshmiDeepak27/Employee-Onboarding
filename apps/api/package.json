@@ -15,8 +15,10 @@
     "db:migrate": "node scripts/with-root-env.cjs prisma migrate dev",
     "db:studio": "node scripts/with-root-env.cjs prisma studio",
     "db:seed": "node scripts/with-root-env.cjs tsx prisma/seed.ts",
+    "db:seed:presentation": "node scripts/seed-presentation.cjs",
     "db:seed:reference": "node scripts/with-root-env.cjs tsx prisma/seed.ts --reference",
     "db:seed:templates": "node scripts/with-root-env.cjs tsx prisma/seed-templates.ts",
+    "keycloak:clean:presentation": "node scripts/with-root-env.cjs tsx scripts/clean-presentation-keycloak.ts",
     "db:deploy": "node scripts/with-root-env.cjs prisma migrate deploy"
   },
   "dependencies": {

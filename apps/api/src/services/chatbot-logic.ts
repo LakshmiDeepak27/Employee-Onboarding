@@ -6,7 +6,7 @@ export function fallback(
   refusal: ChatResponse['refusal'],
 ): ChatResponse {
   return {
-    answer: `${answer} This is grounded policy retrieval, not a generated answer. Please contact HR for a definitive answer.`,
+    answer,
     citations: [],
     grounded: false,
     provider: 'fallback',

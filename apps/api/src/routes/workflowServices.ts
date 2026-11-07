@@ -1169,7 +1169,10 @@ workflowRouter.get(
           const planScope = await scopedServiceWhere(req, "managertask.read");
           const taskWhere = {
             service: "MANAGER" as const,
-            plan: { ...((planScope as any).task?.plan ?? {}), status: { in: ["APPROVED", "IN_PROGRESS"] } },
+            plan: {
+              ...((planScope as any).task?.plan ?? {}),
+              status: { in: ["APPROVED", "IN_PROGRESS", "AWAITING_COMPLETION_APPROVAL", "COMPLETED"] as const },
+            },
           };
           const [dbItems, count] = await Promise.all([
             prisma.planTask.findMany({
@@ -1288,8 +1291,8 @@ workflowRouter.put(
           prisma.employee.findUnique({ where: { id: effectiveBuddy }, select: { id: true, managerId: true, departmentId: true, status: true } }),
         ]);
         if (!newHire || !buddy || buddy.id === newHire.id || buddy.status !== "ACTIVE" || buddy.departmentId !== newHire.departmentId)
-          throw badRequest("Choose an active team member from the new hire’s department.");
-        if (actor.roles.includes("manager") && !actor.roles.includes("hr_admin") && buddy.managerId !== actor.employeeId)
+          throw badRequest("Choose an active teammate or the manager as onboarding contact, from the new hire’s department.");
+        if (actor.roles.includes("manager") && !actor.roles.includes("hr_admin") && buddy.id !== actor.employeeId && buddy.managerId !== actor.employeeId)
           throw badRequest("Choose a peer from your own team as the onboarding buddy.");
       }
       const effectiveAgenda = b.agenda ?? (existing?.agenda as any[] | null) ?? [];

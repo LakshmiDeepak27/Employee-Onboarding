@@ -346,6 +346,52 @@
           "password"
         ]
       },
+      "ManagerOption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "jobTitle": {
+            "type": "string"
+          },
+          "departmentName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "example": "hr.admin@demo.io"
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]*@clyora$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "firstName",
+          "lastName",
+          "jobTitle",
+          "departmentName",
+          "email"
+        ]
+      },
       "RefreshResponse": {
         "type": "object",
         "properties": {
@@ -528,6 +574,29 @@
             ],
             "format": "uuid",
             "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "latestPlanId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "latestPlanStatus": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "DRAFT",
+              "AWAITING_APPROVAL",
+              "APPROVED",
+              "IN_PROGRESS",
+              "AWAITING_COMPLETION_APPROVAL",
+              "COMPLETED",
+              "REFUSED"
+            ]
           }
         },
         "required": [
@@ -541,7 +610,9 @@
           "employmentType",
           "startDate",
           "status",
-          "activePlanId"
+          "activePlanId",
+          "latestPlanId",
+          "latestPlanStatus"
         ]
       },
       "PageMeta": {
@@ -4172,6 +4243,65 @@
         }
       }
     },
+    "/api/v1/employees/managers": {
+      "get": {
+        "tags": [
+          "Employees"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List assignable manager identities",
+        "description": "HR-only list of manager-role users that are linked to employee profiles, so new hires receive a valid direct-report relationship.",
+        "responses": {
+          "200": {
+            "description": "Managers available for assignment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ManagerOption"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but the role lacks the permission or the row is out of scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Manager options are unavailable while the employee database is offline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "tags": [
@@ -5765,6 +5895,16 @@
             },
             "required": false,
             "name": "assigneeUserId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+            },
+            "required": false,
+            "name": "planId",
             "in": "query"
           },
           {

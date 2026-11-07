@@ -22,6 +22,8 @@
     "db:migrate": "npm run db:migrate -w @eo/api",
     "db:push": "npm run db:push -w @eo/api",
     "db:seed": "npm run db:seed -w @eo/api",
+    "db:seed:presentation": "npm run db:seed:presentation -w @eo/api",
+    "keycloak:clean:presentation": "npm run keycloak:clean:presentation -w @eo/api",
     "db:seed:reference": "npm run db:seed:reference -w @eo/api",
     "db:studio": "npm run db:studio -w @eo/api",
     "openapi": "npm run openapi -w @eo/api",

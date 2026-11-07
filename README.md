@@ -1,205 +1,189 @@
-# Employee Onboarding
+# CLYORA — Employee Onboarding Orchestrator
 
-React/Vite frontend, Express API, Prisma/PostgreSQL, and optional Ollama/Gemini plan generation. The blue-and-white redesign uses real API records, nested routes, role guards, refresh-session recovery, and responsive layouts.
+CLYORA coordinates employee onboarding across HR, managers, IT, finance, and employees. HR creates an employee profile, reviews and approves an onboarding plan, and tracks work through final sign-off. Each team gets a role-scoped workspace for the tasks it owns.
+
+> **Project status:** This repository is an active project. The local development setup is documented below. A public deployment and presentation video have not yet been linked.
+
+## Project links
+
+| Resource | Link |
+| --- | --- |
+| Live deployment | **Coming soon** — add the public HTTPS URL when deployed. |
+| Video presentation | **Coming soon** — add the recording URL when published. |
+| Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
+| API reference (local) | `http://localhost:4000/docs` after starting the API |
+
+## Architecture
+
+![CLYORA architecture diagram](docs/assets/clyora-architecture.png)
+
+Keycloak authenticates users with OpenID Connect. CLYORA’s API verifies the identity, then applies roles and data scopes from PostgreSQL; Keycloak groups and token role claims do not grant application permissions. The orchestrator combines employee and approved policy context with deterministic checks. AI can suggest a plan, but cannot approve or dispatch it. HR approval is required before the plan creates downstream work.
+
+## What it does
+
+- Creates and tracks one onboarding plan per employee.
+- Routes work to six areas: documents, equipment, payroll, benefits, training, and manager setup.
+- Gives HR, IT, managers, and employees different workspaces and permissions.
+- Checks task ownership, dependencies, policy scope, and dates before HR review.
+- Records workflow activity for review and audit.
+- Uses a baseline plan when an optional AI provider is unavailable; unsupported policy coverage is escalated instead of invented.
+- Supports employee account activation through Keycloak email when its Admin API and SMTP are configured.
+
+## Roles
+
+| Role | Main responsibilities |
+| --- | --- |
+| HR administrator | Create employee records, review and approve plans, oversee progress, and complete final sign-off. |
+| IT administrator | Fulfil equipment and access work assigned to IT. |
+| Manager | Complete buddy, first-day, check-in, and goal-setting tasks for direct reports. |
+| Employee | Complete assigned profile and document steps and track onboarding tasks, training, and benefits. |
+
+## Technology
+
+- **Web:** React, TypeScript, Vite
+- **API:** Node.js, Express, TypeScript
+- **Data:** PostgreSQL, Prisma
+- **Identity:** Keycloak with OIDC Authorization Code flow and PKCE
+- **Validation and API contract:** Zod and OpenAPI
+- **Optional plan assistance:** Ollama or Gemini; deterministic baseline is available
+- **Local services:** Docker Compose
 
 ## Run locally
 
-Keep the supplied credentials only in the ignored `.env`. Teammates copy `.env.example` and obtain credentials privately.
+### Prerequisites
 
-Use Node.js 22 and Docker Desktop. Copy `.env.example` to `.env`; for local PostgreSQL, keep the example `DATABASE_URL` and `DIRECT_URL` values. If you intentionally use Neon, replace them with the pooled and direct Neon URLs and make sure the Neon project is active and reachable.
+- Node.js 22 or newer
+- npm
+- Docker Desktop (for PostgreSQL and local Keycloak)
+
+### 1. Configure environment
+
+From the repository root, copy the example environment file and edit `.env`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Keep `.env` private and out of Git. For local PostgreSQL, the example database URLs work with the Compose defaults. Replace the development JWT secrets before using any shared or deployed environment.
+
+### 2. Start PostgreSQL and Keycloak
 
 ```powershell
 docker compose up -d db
-npm run setup
-npm run dev:api
-```
-
-In a second terminal run `npm run dev:web`, then open http://localhost:5173. `npm run setup` generates Prisma, applies migrations, seeds RBAC/reference data and clearly labelled demo templates (no demo users/employees by default), then builds the project. Configure all four OIDC variables in `.env` before attempting Keycloak sign-in. The app will return a clear 503 if PostgreSQL is unreachable; it does not fabricate sessions or records.
-
-For an existing database, use `npm run db:deploy` then rerun `npm run db:seed:reference` and `npm run db:seed:templates`. Demo employee records and identities remain opt-in through `SEED_DEMO_DATA=true`. To bootstrap the first HR identity, set `BOOTSTRAP_HR_EMAIL=<username>.hr@clyora` for one `npm run db:seed` invocation. The app creates an invited account with the `hr_admin` database role and no password; create a matching Keycloak user with verified email, then sign in through OIDC. Do not use this bootstrap setting for existing users or routine production startup. On PowerShell: `$env:BOOTSTRAP_HR_EMAIL='deepak.hr@clyora'; npm run db:seed; Remove-Item Env:BOOTSTRAP_HR_EMAIL`.
-
-## Workflow
-
-1. HR creates an employee, including location, department and reporting manager.
-2. Generate a plan and track its saved background job. When the configured model is unavailable, the deterministic baseline is used. Without approved policy coverage, the plan stays limited to safe operational setup tasks.
-3. Review sensitive tasks, then approve the plan. Approval creates downstream service records.
-4. Complete document, equipment, payroll, benefits, training and manager work. Prerequisites restrict actions; verified work advances plan progress.
-5. When every task is completed or explicitly skipped, the plan enters `AWAITING_COMPLETION_APPROVAL`. HR reviews the completed journey and records final sign-off; only then is the employee marked `ACTIVE` and the plan marked `COMPLETED`.
-6. Inspect plan audit history and download the IT pack. Its scripts are templates for administrator review, not automatically executed integrations.
-
-HR, IT, manager and employee workspaces share consistent navigation. The employee assistant currently searches policy sources; it does not claim to answer with AI.
-
-### Integrated Workflow Services
-
-- **Payroll Setup & Verification (Service 3)**:
-  - Task-scoped lifecycle (`AWAITING_TAX_FORM`, `AWAITING_BANK_DETAILS`, `PENDING`, `READY`, `VERIFIED`).
-  - Strict security controls: raw bank account and national ID strings are masked write-only and never stored or returned; only 4-digit suffixes and opaque tokens are persisted.
-  - Plan approval gate, dependency satisfaction checks, serializable transaction isolation, and mandatory tamper-evident audit trail.
-- **Benefits Statutory Enrolment & AI Advisor (Service 4)**:
-  - Enrolment window enforcement: statutory 31-day (Ontario CA-ON) and 30-day (UK/US) statutory windows with at-risk alerts.
-  - AI Benefit Advisor providing grounded recommendations, citing corporate policy and statutory references with authority refusal outside supported jurisdictions.
-- **Training Pathways & Compliance Deadlines (Service 5)**:
-  - Automated statutory course assignment (7-day Ontario OHSA worker health & safety, 30-day UK GDPR data protection).
-  - Grounded training advisory citing statutory requirements.
-- **Manager Tasks & Day-One Alignment (Service 6)**:
-  - Deterministic action generator producing prioritized recommendations (`ASSIGN_BUDDY`, `PREPARE_DAY_ONE_AGENDA`, `APPROVE_SYSTEM_ACCESS`, `SCHEDULE_INTRO_MEETINGS`, `SET_PROBATION_GOALS`).
-  - High-performance native TypeScript architecture replacing fragile LangGraph dependencies, preventing build and CI cache failures.
-
-## Keycloak OIDC Authentication & Security Architecture
-
-### 1. Production Sign-in & OIDC Authorization Code Flow with PKCE
-- **Flow**: Keycloak OIDC is the production authentication path using Authorization Code flow with PKCE (`code_challenge_method=S256`), CSRF state, and nonce protection.
-- **Verification**: ID tokens are exchanged directly over backchannel and verified using JWKS retrieved from Keycloak's `.well-known/openid-configuration` endpoint (`jose.jwtVerify`). Issuer, audience (`OIDC_CLIENT_ID`), expiration, and signature are enforced.
-- **Verified Email Enforcement**: Every ID token must contain `email_verified: true`. Unverified email addresses are strictly rejected with actionable guidance.
-- **Cookie Security**: Secure session cookies are issued:
-  - `eo_refresh`: Refresh token cookie (`httpOnly: true`, `sameSite: "lax"`, `path: "/api/v1/auth"`, `secure` in production).
-  - `eo_oidc_state`: PKCE verifier, state, and nonce storage during login handshake (`httpOnly: true`, `sameSite: "lax"`, 10-minute expiry, cleared immediately upon callback).
-- **Hardened Access**: Self-service public signup and password login are disabled. Users sign in through Keycloak OIDC; application roles and scopes are assigned through trusted provisioning and stored in the database.
-
-### 2. Database-Governed RBAC (Zero Claim Trust)
-- User permissions, roles (`hr_admin`, `it_admin`, `manager`, `employee`), and data scopes (`SELF`, `REPORTS`, `DEPARTMENT`, `ORG`) are defined and loaded exclusively from the application PostgreSQL database (`roles`, `user_roles`, `role_permissions`).
-- **Zero privilege escalation**: The application never derives or escalates roles from Keycloak token claims, groups, or email address patterns. Keycloak authenticates identity; the application database governs authorization.
-
-### 3. Pre-Provisioned Identity Linking & Conflict Prevention
-- A Keycloak identity is linked **only** to a pre-provisioned user account with a matching verified email.
-- Unprovisioned users (emails not found in the database) receive a 401 error instructing them to contact HR for provisioning.
-- **Conflicting Identity Protection**:
-  - Rejects sign-in if an incoming Keycloak subject (`sub`) is already bound to a different email.
-  - Rejects sign-in if the database account is already bound to a different Keycloak subject.
-- On valid first sign-in, the provider subject is persisted safely in `users.oidc_subject`, `users.auth_provider` is set to `'oidc'`, and any `INVITED` status automatically transitions to `ACTIVE`.
-
-### 4. HR Employee Activation
-- HR can send an activation link from an employee profile. The API creates or safely matches a Keycloak user, assigns only the `employee` role in the application database, and asks Keycloak to email a seven-day link requiring email verification and password setup.
-- The message is sent to the employee's real personal email. The Keycloak username uses the work-email prefix when provided; the verified email claim matches the pre-provisioned application account. No reusable password is generated, displayed, or sent by CLYORA.
-- Keycloak Admin API credentials stay on the API server. The portal requires a confidential service-account client with `realm-management` roles `manage-users`, `view-users`, and `query-users`; configure the realm's SMTP settings so Keycloak can deliver activation messages. Retrying an invite resends the action email for the same matching account.
-
----
-
-## Local Keycloak Setup Guide
-
-### 1. Start local Keycloak
-Copy `.env.example` to `.env`, set a local-only `KEYCLOAK_DEV_ADMIN_PASSWORD`, then run:
-
-```powershell
 npm run auth:up
 ```
 
-Open http://localhost:8080/admin and sign in with `KEYCLOAK_DEV_ADMIN_USERNAME` and `KEYCLOAK_DEV_ADMIN_PASSWORD` from `.env`. `npm run auth:up` starts an existing container named `eo-keycloak` if you already created one with `docker run`; otherwise it creates the local Compose service. New Compose-managed Keycloak data is stored in the named `keycloak_data` volume. Start it again later with `npm run auth:up`; `npm run auth:stop` stops it and `npm run auth:logs` shows its logs. Do not run `docker compose down -v` if you want to keep local Keycloak configuration and application documents.
+Keycloak is available at `http://localhost:8080`. Its local development mode and default credentials are for local testing only. Set a private `KEYCLOAK_DEV_ADMIN_PASSWORD` in `.env` before starting it. The local configuration persists in the `keycloak_data` Docker volume.
 
-The local Keycloak service is behind the `local-identity` Compose profile and is not started by the normal production `docker compose up --build -d` command. `start-dev` is local testing only. For deployment, use a separately configured Keycloak production deployment or managed identity provider with HTTPS, a persistent production database, secure secrets, hostname/proxy settings, MFA policy, and SMTP. This Compose convenience does not create a production identity deployment.
+### 3. Configure Keycloak OIDC
 
-If the existing standalone container is named `eo-keycloak`, `npm run auth:up` reuses it, preserving your current realm and clients. Do not start a second Keycloak container at the same time because both need port 8080.
+In the `employee-onboarding` realm, create an OpenID Connect client with ID `employee-onboarding-app`:
 
-### 2. Create the Realm
-1. In the top-left dropdown, click **Create Realm**.
-2. Realm name: `employee-onboarding`.
-3. Click **Create**.
+- Client authentication: **On** (confidential client)
+- Standard flow: **On**
+- Valid redirect URI: `http://localhost:4000/api/v1/auth/oidc/callback`
+- Web origins: `http://localhost:5173` and `http://localhost:4000`
+- PKCE code challenge method: `S256`
 
-### 3. Configure the OIDC Client
-1. Navigate to **Clients** -> **Create client**.
-2. **General Settings**:
-   - Client type: `OpenID Connect`
-   - Client ID: `employee-onboarding-app`
-   - Name: `Employee Onboarding Application`
-   - Click **Next**.
-3. **Capability Config**:
-   - Client authentication: **ON** (Confidential client)
-   - Authorization: OFF
-   - Authentication flow: Standard flow (Authorization Code), Direct access grants (optional).
-   - Click **Next**.
-4. **Login Settings**:
-   - Root URL: `http://localhost:5173`
-   - Home URL: `http://localhost:5173`
-   - Valid redirect URIs: `http://localhost:4000/api/v1/auth/oidc/callback`
-   - Valid post logout redirect URIs: `http://localhost:5173/*`
-   - Web origins: `http://localhost:5173`, `http://localhost:4000`
-   - Click **Save**.
-5. **Credentials Tab**:
-   - Copy the **Client Secret** value and set it as `OIDC_CLIENT_SECRET` in your `.env`.
-6. **Advanced Settings Tab** (Scroll down):
-   - Proof Key for Code Exchange (PKCE) Code Challenge Method: `S256`.
-   - Click **Save**.
+Copy the client secret into the API environment. Set these values in `.env` (replace the secret with the value from Keycloak):
 
-### 4. Configure HR-managed employee activation
-1. Create a second OpenID Connect client named `employee-onboarding-provisioner`.
-2. Enable **Client authentication** and **Service accounts roles**; disable Standard flow and Direct access grants for this client.
-3. Under **Service account roles**, select client `realm-management` and assign `manage-users`, `view-users`, and `query-users` only.
-4. Copy its client secret into the API `.env` as `KEYCLOAK_ADMIN_CLIENT_ID=employee-onboarding-provisioner` and `KEYCLOAK_ADMIN_CLIENT_SECRET=<secret>`.
-5. In **Realm settings → Email**, configure and test SMTP delivery. Keycloak sends the time-limited verify-email and set-password link to the employee's personal email.
-6. Restart the API. HR can then open an employee profile and click **Send employee activation link**.
+```dotenv
+OIDC_ISSUER_URL=http://localhost:8080/realms/employee-onboarding
+OIDC_CLIENT_ID=employee-onboarding-app
+OIDC_CLIENT_SECRET=<keycloak-client-secret>
+OIDC_REDIRECT_URI=http://localhost:4000/api/v1/auth/oidc/callback
+OIDC_SCOPES=openid profile email
+```
 
-### 5. Create the Initial HR User in Keycloak
-Create an enabled Keycloak user for each explicitly provisioned application account, with **Email verified** toggled **ON**. For example, if `BOOTSTRAP_HR_EMAIL=deepak.hr@clyora`, create username `deepak` with email `deepak.hr@clyora`. The matching application account and `hr_admin` role must already exist in the database; do not assign Keycloak realm roles.
+The secret is server-side configuration; do not put it in frontend variables or commit it.
 
-For each user:
-1. Navigate to **Users** -> **Add user**.
-2. Set Email and Username, toggle **Email verified** to **ON**, and click **Create**.
-3. Go to **Credentials**, set a strong password for that Keycloak user, set Temporary to **OFF**, and save. This is the SSO password; the app does not store it.
+### 4. Install, migrate, seed reference data, and build
 
----
+```powershell
+npm run setup
+```
 
-## How HR, Managers, and Employees Sign In
+This installs dependencies, generates the Prisma client, applies database migrations, seeds reference data and task templates, and builds the workspaces. It does **not** create sample users or employees.
 
-### Production / Keycloak SSO Flow:
-1. Navigate to http://localhost:5173/login (or http://localhost:4000/login).
-2. Click **"Continue with Organization SSO (Keycloak)"**.
-3. You are redirected to Keycloak's login page with PKCE challenge, state, and nonce parameters.
-4. Sign in with the verified Keycloak identity whose email matches the provisioned application account.
-5. Keycloak redirects back to `GET /api/v1/auth/oidc/callback`.
-6. The API verifies the authorization code with Keycloak, validates the token signature against Keycloak JWKS, checks `email_verified: true`, links the identity on first login, sets the HTTP-only refresh cookie, and redirects to `/login?sso=success`.
-7. The application automatically loads the session with roles and scopes loaded from the application database:
-   - **HR Admin** enters `/hr/dashboard` with organization-wide HR controls.
-   - **IT Admin** enters `/it_admin/dashboard` with equipment-only fulfillment controls.
-   - **Manager** enters `/manager/dashboard` with direct-report scope.
-   - **Employee** enters `/employee/dashboard` with self scope.
+To bootstrap the first HR application account, run a one-time seed with a work-style HR email:
 
-The login screen uses Keycloak SSO only; there are no demo login accounts, demo account switchers, or application password sign-in controls. Login addresses follow `<username>.hr@clyora`, `<username>.manager@clyora`, and `<username>@clyora`; trusted provisioning assigns matching application database roles, which remain the source of authorization. After signing out, choosing SSO again asks Keycloak to authenticate again so a different user can sign in.
+```powershell
+$env:BOOTSTRAP_HR_EMAIL = 'yourname.hr@clyora'
+npm run db:seed
+Remove-Item Env:BOOTSTRAP_HR_EMAIL
+```
 
-## Configuration
+Then create the matching user in Keycloak, use the same email, mark the email verified, and set that user's password in Keycloak. The application database assigns the `hr_admin` role; do not grant application access through Keycloak roles. Use the HR account to provision other users through the application.
 
-- `DATABASE_URL`: pooled Neon connection for the application.
-- `DIRECT_URL`: direct connection for migrations.
-- `OIDC_ISSUER_URL`: Keycloak realm issuer URL (e.g. `http://localhost:8080/realms/employee-onboarding`).
-- `OIDC_CLIENT_ID`: Keycloak client ID (e.g. `employee-onboarding-app`).
-- `OIDC_CLIENT_SECRET`: Keycloak client secret from client credentials.
-- `OIDC_REDIRECT_URI`: backend callback URL (e.g. `http://localhost:4000/api/v1/auth/oidc/callback`).
-- `OIDC_SCOPES`: space-delimited OIDC scopes (`openid profile email`).
-- Separate JWT secrets are required (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`). Keep `DEV_AUTH_BYPASS=false` outside local development.
-- `LLM_PROVIDER=ollama` uses `OLLAMA_BASE_URL` and `LLM_MODEL`. Use `gemini` with `GEMINI_API_KEY`, or `disabled` for baseline-only generation.
-- For local inference: install Ollama, run `ollama pull qwen2.5:7b-instruct`, then `ollama serve`. The adapter uses schema-constrained `/api/chat`, bounded retries and timeouts.
-- Retrieval currently uses database jurisdiction/topic matching, not vector embeddings; `EMBEDDING_MODEL` is reserved for a future vector index.
-- Documents are stored in `DOCUMENT_STORAGE_DIR`, default `.data/documents`. PDF, PNG and JPEG uploads are limited to 5 MB and require authenticated download.
-- Email password recovery is not configured; the UI directs users to HR.
+### 5. Start the API and web app
+
+In separate terminals:
+
+```powershell
+npm run dev:api
+```
+
+```powershell
+npm run dev:web
+```
+
+Open [http://localhost:5173](http://localhost:5173). Sign in using **Organization SSO**. The API runs at `http://localhost:4000`; interactive API documentation is at `http://localhost:4000/docs`.
+
+## Typical onboarding walkthrough
+
+1. **HR:** add an employee with their department, location, joining date, and manager.
+2. **HR:** generate the plan, inspect validation findings, and approve it. Approval creates the service work.
+3. **Manager and IT:** open their workspaces and complete their assigned tasks; dependencies and status are visible in the plan.
+4. **Employee:** activate their account and complete assigned profile, document, training, and benefits steps.
+5. **HR:** review outstanding work and record final completion approval.
+
+For the employee activation email, configure a confidential Keycloak service-account client with only the required user-management permissions, then configure SMTP under **Realm settings → Email**. If these are not configured, HR can still create and manage the onboarding record, but Keycloak cannot send the activation link.
+
+### Three-account presentation walkthrough
+
+For a clean local walkthrough, keep the provisioned HR identity `asha.hr@clyora` and manager identity `david.manager@clyora`. The reset keeps those two CLYORA accounts, gives David the linked manager profile required for direct-report access, removes prior local employee/workflow records, and leaves HR to create one fresh employee from the app. The employee portal identity is created when HR sends the Keycloak activation invite, making three CLYORA application users for the walkthrough.
+
+After starting the local database and Keycloak, preview and then clean non-staff human identities in the `employee-onboarding` realm. The realm's provisioning service accounts are preserved; the Keycloak admin-console account lives in the separate `master` realm and is not touched:
+
+```powershell
+npm run keycloak:clean:presentation
+npm run keycloak:clean:presentation -- --apply
+npm run db:seed:presentation
+```
+
+The database reset is guarded to localhost and is destructive: it removes other CLYORA users, employee profiles, prior plans/tasks, audit/session history and policy documents; it preserves Asha and David's accounts and recreates only David's manager profile. Do not point this command at a deployed database. Then sign in as HR, create the employee, choose David as manager, and send the activation email. The profile appears immediately in HR's directory and David's team. The invite adds the third CLYORA account; after the employee activates it, their portal shows the same plan and task progress. HR approval starts work, and HR's final sign-off marks the plan complete. Local policy records are illustrative and are labeled as samples in the UI.
+
+## Useful commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev:api` | Run the API in development mode |
+| `npm run dev:web` | Run the Vite web application |
+| `npm run setup` | Install, migrate, seed reference/task-template data, and build |
+| `npm run db:deploy` | Apply committed Prisma migrations |
+| `npm run db:seed:reference` | Seed reference data |
+| `npm run db:seed:templates` | Seed onboarding task templates |
+| `npm run auth:up` / `npm run auth:stop` | Start or stop local Keycloak |
+| `npm run auth:logs` | View local Keycloak logs |
+| `npm run build` | Build all workspaces |
+| `npm run verify` | Run typecheck, lint, OpenAPI check, tests, and build |
+
+## Optional AI configuration
+
+The example configuration uses `LLM_PROVIDER=disabled`, so the baseline plan works without an AI API key. To enable assistance, configure `LLM_PROVIDER=ollama` with a reachable Ollama server or `LLM_PROVIDER=gemini` with `GEMINI_API_KEY`. Keep provider secrets on the API server. AI output remains subject to application validation and HR approval.
 
 ## Deployment
 
-The simplest target is one Node/container service serving both the API and built frontend, with Neon and persistent document storage.
+No public deployment is currently documented or verified. Before deploying, configure HTTPS, production-strength secrets, a reachable PostgreSQL database, persistent document storage, trusted CORS origins, and a production-ready identity provider/Keycloak deployment. Do not use Keycloak `start-dev` or the local Compose credentials in production. Review [the Docker configuration](docker-compose.yml) and [environment example](.env.example) against your hosting platform before release.
 
-```sh
-docker compose up --build -d
-```
+## Contributing
 
-Compose uses `.env`, forces production mode and disables the development auth bypass. It applies migrations without reseeding or pushing schema. Set `CORS_ORIGIN` to the deployed HTTPS origin, use fresh JWT secrets and mount the document volume. Run a single API instance: jobs execute in-process and are not a distributed, restart-resilient queue.
+Contributions are welcome. Open an issue to describe a bug or proposed change, then submit a pull request with a focused explanation and the checks relevant to the change. Never include real employee data, credentials, tokens, database URLs, or private policy documents in an issue or pull request.
 
-Docker execution and public hosting have not been verified in this environment. No live deployment has been made. For horizontal scaling, add durable workers and shared object storage first.
+## Security
 
-## Checks
+Do not report security vulnerabilities in public issues. Until a private security contact is published, contact the repository owner directly through GitHub. Never include secrets or real employee information in reports.
 
-```sh
-npm run build
-npm run lint
-npm test
-npm run openapi:check
-```
+## License
 
-Live tests require the configured development database, a provisioned HR account, reference data, and `RUN_DATABASE_TESTS=true`. They create uniquely named `qa-…@example.invalid` employee records and a harmless upload; those records remain available for inspection.
-
-See [verification and limitations](docs/REDESIGN-PROGRESS.md).
-
-## Backend LLM boundary
-
-Proposals are validated before persistence. Template authority, owner, service, deadlines and prerequisites override model values. Citations must quote stored clauses; missing database sources are never replaced with invented in-memory policy data. Cyclic proposals are rejected. Validation findings are saved in the same plan transaction, and the configured model name is recorded. Active job creation is serialized per employee with a PostgreSQL advisory lock.
-
-Ollama API contract: https://docs.ollama.com/api/chat and https://docs.ollama.com/capabilities/structured-outputs.
-
-Local Ollama was not running during verification. Adapter success/failure/schema tests use mocked HTTP responses; they do not establish real model quality. In Docker, localhost refers to the container: use a reachable private Ollama service URL or host.docker.internal for a host service, without exposing Ollama publicly.
+No license file is currently included in this repository. Until the maintainer adds one, reuse and redistribution permissions have not been granted. Add a `LICENSE` file before presenting the repository as formally open source.

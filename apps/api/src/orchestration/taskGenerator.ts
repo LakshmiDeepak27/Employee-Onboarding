@@ -85,6 +85,19 @@ export function generatePlanTasks(
   proposedTasks: ProposedLlmTaskInput[] = [],
   generationMode: "LLM_GROUNDED" | "BASELINE_FALLBACK" = "BASELINE_FALLBACK",
 ): TaskGenerationResult {
+  // Defense in depth: the current onboarding workflow only creates work owned
+  // by HR or the reporting Manager, even if an AI provider returns other roles.
+  const eligibleOwnerRules = mandatoryRules.filter(
+    (rule) => rule.ownerRole === "HR" || rule.ownerRole === "MANAGER",
+  );
+  const eligibleTaskTypes = new Set(eligibleOwnerRules.map((rule) => rule.taskType));
+  const eligibleRules = eligibleOwnerRules.map((rule) => ({
+    ...rule,
+    // A scoped plan cannot depend on work intentionally omitted from it.
+    dependsOnTypes: rule.dependsOnTypes.filter((taskType) =>
+      eligibleTaskTypes.has(taskType),
+    ),
+  }));
   const calendarConfig: CalendarConfig = {
     businessDays: profile.businessDays,
     timezone: profile.timezone,
@@ -104,18 +117,20 @@ export function generatePlanTasks(
   if (generationMode === "LLM_GROUNDED") {
     for (const proposal of proposedTasks) {
       if (taskMap.has(proposal.taskType)) continue;
-      const rule = mandatoryRules.find((r) => r.taskType === proposal.taskType);
-      const p = rule
-        ? {
-            ...proposal,
-            service: rule.service,
-            ownerRole: rule.ownerRole,
-            authorityClass: rule.authorityClass,
-            deadlineAnchor: rule.deadlineAnchor,
-            deadlineOffsetDays: rule.deadlineOffsetDays,
-            dependsOnTypes: rule.dependsOnTypes,
-          }
-        : proposal;
+      // Only permit AI to refine a task already approved by the deterministic
+      // rule catalog. This prevents invented task types/owners from entering a
+      // plan while preserving generated descriptions and policy citations.
+      const rule = eligibleRules.find((r) => r.taskType === proposal.taskType);
+      if (!rule) continue;
+      const p = {
+        ...proposal,
+        service: rule.service,
+        ownerRole: rule.ownerRole,
+        authorityClass: rule.authorityClass,
+        deadlineAnchor: rule.deadlineAnchor,
+        deadlineOffsetDays: rule.deadlineOffsetDays,
+        dependsOnTypes: rule.dependsOnTypes,
+      };
       const taskId = randomUUID();
       taskTypeToId.set(p.taskType, taskId);
 
@@ -166,9 +181,9 @@ export function generatePlanTasks(
     }
   }
 
-  // 2. Ensure every statutory rule from the Rules Engine is covered
+  // 2. Ensure every eligible deterministic rule from the Rules Engine is covered
   // (Guardrail V4: Mandatory Coverage — insert if missing)
-  for (const rule of mandatoryRules) {
+  for (const rule of eligibleRules) {
     if (!taskMap.has(rule.taskType)) {
       const taskId = randomUUID();
       taskTypeToId.set(rule.taskType, taskId);

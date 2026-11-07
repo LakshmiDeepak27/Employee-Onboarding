@@ -95,7 +95,11 @@ export function ServicePage({ service }: { service: Service }) {
   const { user } = useSession();
   const cfg = configs[service];
   const cache = useQueryClient();
-  const q = useQuery({ queryKey: ["service", service], queryFn: cfg.load });
+  const q = useQuery({
+    queryKey: ["service", service],
+    queryFn: cfg.load,
+    refetchInterval: service === "manager" ? 5000 : false,
+  });
   const [search, setSearch] = useState("");
   const [managerError, setManagerError] = useState("");
   const [managerDrafts, setManagerDrafts] = useState<Record<string, { buddyEmployeeId: string; agendaText: string; notes: string }>>({});
@@ -191,7 +195,7 @@ export function ServicePage({ service }: { service: Service }) {
     }
     setManagerError("");
     if (markComplete && row.kind === "BUDDY_ASSIGNMENT" && !draft.buddyEmployeeId) {
-      setManagerError("Choose a buddy before completing this task.");
+      setManagerError("Choose a teammate or select yourself as the onboarding contact before completing this task.");
       return;
     }
     if (markComplete && needsAgenda && !agenda.length) {
@@ -299,14 +303,15 @@ export function ServicePage({ service }: { service: Service }) {
                       <>
                         {row.kind === "BUDDY_ASSIGNMENT" && (
                           <label className="form-field" style={{ marginTop: 12 }}>
-                            <span className="field-label">Onboarding buddy</span>
+                            <span className="field-label">Onboarding buddy or contact</span>
                             <select aria-label={`Onboarding buddy for ${row.employeeName ?? "employee"}`} value={managerDraft(row).buddyEmployeeId} disabled={!!row.completedAt || action.isPending || team.isLoading || team.isError} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), buddyEmployeeId: e.target.value } }))}>
                               {team.isLoading && <option value="">Loading team…</option>}
                               <option value="">Choose a team member</option>
-                              {(team.data?.items ?? []).filter((person) => person.id !== row.employeeId && person.id !== user?.employeeId && person.status === "ACTIVE").map((person) => <option value={person.id} key={person.id}>{person.firstName} {person.lastName}</option>)}
+                              {(team.data?.items ?? []).filter((person) => person.id !== row.employeeId && person.status === "ACTIVE").map((person) => <option value={person.id} key={person.id}>{person.firstName} {person.lastName}{person.id === user?.employeeId ? " (you)" : ""}</option>)}
                             </select>
+                            <small className="field-hint">Choose a teammate, or serve as the onboarding contact yourself when the team is small.</small>
                             {team.isError && <small className="field-hint">Could not load team members. Refresh this page and try again.</small>}
-                            {team.isSuccess && !team.data.items.some((person) => person.id !== row.employeeId && person.id !== user?.employeeId && person.status === "ACTIVE") && <small className="field-hint">No active teammates are available for buddy assignment.</small>}
+                            {team.isSuccess && !team.data.items.some((person) => person.id !== row.employeeId && person.status === "ACTIVE") && <small className="field-hint">No active teammates are available. Ask HR to add a teammate or contact HR for help.</small>}
                           </label>
                         )}
                         {["DAY_ONE_AGENDA", "INTRO_MEETINGS"].includes(row.kind ?? "") && (
@@ -480,7 +485,11 @@ export function ServicePage({ service }: { service: Service }) {
           ) : (
             <Empty
               title={`No ${service === "manager" ? "manager tasks" : service} to show`}
-              text="Assignments appear after HR approves and dispatches an onboarding plan."
+              text={
+                service === "manager"
+                  ? "No approved onboarding plan is assigned to you yet. HR must create the employee profile with you as manager, generate the plan, and approve it. Then your buddy/contact, Day 1 agenda, introductions, and 30-60-90 goal tasks will appear here automatically."
+                  : "Assignments appear after HR approves and dispatches an onboarding plan."
+              }
             />
           )}
         </QueryState>
@@ -872,6 +881,22 @@ export function Help() {
   );
 }
 
+const CURRENCY_OPTIONS = [
+  { code: "INR", label: "INR (₹) - Indian Rupee" },
+  { code: "USD", label: "USD ($) - US Dollar" },
+  { code: "CAD", label: "CAD (C$) - Canadian Dollar" },
+  { code: "EUR", label: "EUR (€) - Euro" },
+  { code: "GBP", label: "GBP (£) - British Pound" },
+  { code: "AUD", label: "AUD (A$) - Australian Dollar" },
+  { code: "SGD", label: "SGD (S$) - Singapore Dollar" },
+  { code: "AED", label: "AED (د.إ) - UAE Dirham" },
+  { code: "JPY", label: "JPY (¥) - Japanese Yen" },
+  { code: "CHF", label: "CHF (Fr) - Swiss Franc" },
+  { code: "NZD", label: "NZD (NZ$) - New Zealand Dollar" },
+  { code: "HKD", label: "HKD (HK$) - Hong Kong Dollar" },
+  { code: "ZAR", label: "ZAR (R) - South African Rand" },
+] as const;
+
 export function Payroll() {
   const { user } = useSession();
   const canVerify = can(user, "payroll.verify");
@@ -975,15 +1000,24 @@ export function Payroll() {
                   </label>
                   <label>
                     Currency
-                    <input
+                    <select
                       name="salaryCurrency"
                       disabled={payrollVerified}
                       required
-                      minLength={3}
-                      maxLength={3}
-                      defaultValue={setup.data?.salaryCurrency ?? ""}
-                      placeholder="INR"
-                    />
+                      defaultValue={setup.data?.salaryCurrency || "INR"}
+                    >
+                      {CURRENCY_OPTIONS.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.label}
+                        </option>
+                      ))}
+                      {setup.data?.salaryCurrency &&
+                        !CURRENCY_OPTIONS.some((c) => c.code === setup.data?.salaryCurrency) && (
+                          <option value={setup.data.salaryCurrency}>
+                            {setup.data.salaryCurrency}
+                          </option>
+                        )}
+                    </select>
                   </label>
                   <label>
                     Tax form type

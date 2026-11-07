@@ -119,7 +119,9 @@ export async function authenticate(
         "TOKEN_INVALID",
       );
     }
-    if (user.status === "SUSPENDED") throw forbidden("Account is suspended");
+    if (user.status === "SUSPENDED" || (user.status === "LOCKED" && !user.lockedUntil)) {
+      throw forbidden("Account is locked or suspended");
+    }
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       throw forbidden("Account is temporarily locked");
     }

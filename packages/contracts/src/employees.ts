@@ -9,6 +9,7 @@ import {
   EmploymentTypeEnum,
   WorkModeEnum,
   EmployeeStatusEnum,
+  PlanStatusEnum,
   PaginationQuery,
   paginated,
 } from "./common.js";
@@ -51,6 +52,9 @@ export const EmployeeSummarySchema = z
     status: EmployeeStatusEnum,
     /** Convenience for the HR dashboard list. */
     activePlanId: Uuid.nullable(),
+    /** Most recent non-refused plan, including completed plans for history. */
+    latestPlanId: Uuid.nullable(),
+    latestPlanStatus: PlanStatusEnum.nullable(),
   })
   .openapi("EmployeeSummary");
 
@@ -122,6 +126,17 @@ export const EmployeeListResponseSchema = paginated(
   EmployeeSummarySchema,
   "EmployeeListResponse",
 );
+
+export const ManagerOptionSchema = z
+  .object({
+    id: Uuid,
+    firstName: z.string(),
+    lastName: z.string(),
+    jobTitle: z.string(),
+    departmentName: z.string().nullable(),
+    email: IdentityEmail,
+  })
+  .openapi("ManagerOption");
 // POST /api/v1/employees/{id}/invite
 
 export const InviteEmployeeRequestSchema = z

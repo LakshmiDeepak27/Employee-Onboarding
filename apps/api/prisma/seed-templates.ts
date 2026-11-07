@@ -5,17 +5,13 @@ dotenv.config({ path: "../../.env" });
 import { PrismaClient, type TaskType, type ServiceArea, type OwnerRole, type AuthorityClass, type DeadlineAnchor, type DeadlineBasis } from "@prisma/client";
 
 const prisma = new PrismaClient();
-const starterNotice = "Starter workflow. HR should confirm company policy, eligibility and dates before applying it to a real hire.";
+const starterNotice = "Review this task against the organization’s currently approved policy and record the required evidence.";
 const templates: Array<{
   taskType: TaskType; service: ServiceArea; title: string; owner: OwnerRole;
   authority: AuthorityClass; anchor: DeadlineAnchor; offset: number; basis: DeadlineBasis;
   lead: number; employmentTypes?: Array<"FULL_TIME" | "PART_TIME" | "CONTRACTOR" | "INTERN">;
 }> = [
-  { taskType: "COLLECT_ID_PROOF", service: "DOCUMENTS", title: "Upload identity document for HR review", owner: "EMPLOYEE", authority: "ROUTINE", anchor: "START_DATE", offset: -5, basis: "BUSINESS_DAYS", lead: 0 },
-  { taskType: "PROVISION_LAPTOP", service: "EQUIPMENT", title: "Prepare and assign work equipment", owner: "IT", authority: "ROUTINE", anchor: "START_DATE", offset: -2, basis: "BUSINESS_DAYS", lead: 5 },
-  { taskType: "COLLECT_TAX_DECLARATION", service: "PAYROLL", title: "Complete payroll tax setup with Finance", owner: "EMPLOYEE", authority: "PAY_AFFECTING", anchor: "START_DATE", offset: 0, basis: "BUSINESS_DAYS", lead: 0 },
-  { taskType: "BENEFITS_ELECTION", service: "BENEFITS", title: "Review available benefits and record an election or waiver", owner: "EMPLOYEE", authority: "ROUTINE", anchor: "START_DATE", offset: 10, basis: "BUSINESS_DAYS", lead: 0, employmentTypes: ["FULL_TIME", "PART_TIME", "INTERN"] },
-  { taskType: "MANDATORY_COMPLIANCE_TRAINING", service: "TRAINING", title: "Complete assigned company onboarding training", owner: "EMPLOYEE", authority: "ROUTINE", anchor: "START_DATE", offset: 14, basis: "BUSINESS_DAYS", lead: 0 },
+  { taskType: "COLLECT_ID_PROOF", service: "DOCUMENTS", title: "Review employee identity document", owner: "HR", authority: "ROUTINE", anchor: "START_DATE", offset: -5, basis: "BUSINESS_DAYS", lead: 0 },
   { taskType: "ASSIGN_BUDDY", service: "MANAGER", title: "Assign an onboarding buddy", owner: "MANAGER", authority: "ROUTINE", anchor: "START_DATE", offset: -2, basis: "BUSINESS_DAYS", lead: 0 },
 ];
 

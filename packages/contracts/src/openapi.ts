@@ -27,6 +27,7 @@ import {
 import {
   EmployeeSchema,
   EmployeeListResponseSchema,
+  ManagerOptionSchema,
   CreateEmployeeRequestSchema,
   UpdateEmployeeRequestSchema,
   ListEmployeesQuerySchema,
@@ -133,6 +134,7 @@ const RESP = {
   409: err("State conflict. See `error.code`."),
   422: err("Semantically invalid."),
   500: err("Unexpected error. Quote `error.requestId` when reporting."),
+  503: err("Service unavailable or database offline."),
 };
 
 function json<T extends z.ZodTypeAny>(schema: T, description: string) {
@@ -158,6 +160,21 @@ registry.registerPath({
     401: err("Invalid credentials."),
     423: err("Account locked. `error.code` is ACCOUNT_LOCKED."),
     429: err("Too many attempts."),
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/v1/employees/managers",
+  tags: ["Employees"],
+  security: SECURITY,
+  summary: "List assignable manager identities",
+  description: "HR-only list of manager-role users that are linked to employee profiles, so new hires receive a valid direct-report relationship.",
+  responses: {
+    200: json(z.array(ManagerOptionSchema), "Managers available for assignment."),
+    401: RESP[401],
+    403: RESP[403],
+    503: err("Manager options are unavailable while the employee database is offline."),
   },
 });
 

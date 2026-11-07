@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Link,
   useNavigate,
@@ -16,6 +16,10 @@ import {
   FileCheck2,
   ArrowUpRight,
   ShieldCheck,
+  MapPin,
+  Calendar,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import {
   CreateEmployeeRequestSchema,
@@ -45,15 +49,20 @@ export function Dashboard() {
   const plans = useQuery({
     queryKey: ["plans", "overview"],
     queryFn: () => api.plans.list({ pageSize: 100 }),
+    refetchInterval: 5000,
   });
   const people = useQuery({
     queryKey: ["people", "count"],
-    queryFn: () => api.employees.list({ pageSize: 1 }),
+    queryFn: () => api.employees.list({ pageSize: 50 }),
     // Roles without employee.read should not fire an API request they are
     // expected to be denied. This also keeps employee dashboards clean.
     enabled: can(user, "employee.read"),
+    refetchInterval: can(user, "employee.read") ? 5000 : false,
   });
   const rows = plans.data?.items ?? [];
+  const directReports = (people.data?.items ?? []).filter(
+    (employee) => employee.id !== user?.employeeId,
+  );
   const open = rows.filter(
     (p) => !["COMPLETED", "CANCELLED", "REFUSED"].includes(p.status),
   );
@@ -140,10 +149,18 @@ export function Dashboard() {
             detail="Tasks flagged at risk"
           />
           <Metric
-            label={w === "hr" ? "Awaiting review" : "People in scope"}
+            label={
+              w === "hr"
+                ? "Awaiting review"
+                : w === "manager"
+                  ? "Direct reports"
+                  : "People in scope"
+            }
             value={
               w === "hr"
                 ? review.length
+                : w === "manager"
+                  ? directReports.length
                 : !can(user, "employee.read")
                   ? "—"
                   : people.isError
@@ -153,6 +170,8 @@ export function Dashboard() {
             detail={
               w === "hr"
                 ? "Draft and pending approval plans"
+                : w === "manager"
+                  ? "Employees reporting to you"
                 : "Based on your account permissions"
             }
           />
@@ -247,6 +266,38 @@ export function Dashboard() {
             </div>
           </Panel>
         </div>
+        {w === "manager" && (
+          <Panel
+            title="Your direct reports"
+            description="New employees appear here as soon as HR assigns you as their manager."
+          >
+            {people.isPending ? (
+              <div className="loading" role="status"><span className="spinner" />Loading your team…</div>
+            ) : directReports.length ? (
+              <div className="team-progress-list">
+                {directReports.map((employee) => (
+                  <Link
+                    key={employee.id}
+                    className="team-progress-row"
+                    to={`/manager/team/${employee.id}`}
+                  >
+                    <span>
+                      <strong>{employee.firstName} {employee.lastName}</strong>
+                      <small>{employee.jobTitle} · {employee.employeeNumber}</small>
+                    </span>
+                    <span>
+                      <Badge value={employee.latestPlanStatus ?? employee.status} />
+                      <small>{employee.latestPlanStatus ? human(employee.latestPlanStatus) : "Waiting for HR to generate the plan"}</small>
+                    </span>
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <Empty title="No direct reports yet" text="When HR creates a profile and assigns you as manager, the employee will appear here." />
+            )}
+          </Panel>
+        )}
       </QueryState>
       <div className="principle-strip">
         <ShieldCheck size={19} />
@@ -311,8 +362,12 @@ export function PlanTable({ rows }: { rows: Plan[] }) {
     </div>
   ) : (
     <Empty
-      title="No onboarding plans yet"
-      text="Create an employee profile, then generate their onboarding plan from the employee record."
+      title={w === "manager" ? "No team onboarding plans yet" : "No onboarding plans yet"}
+      text={
+        w === "manager"
+          ? "Plans appear here after HR assigns an employee to you as their manager, generates the onboarding plan, and approves it. If you expected a plan, ask HR to check the employee’s Manager field and plan approval status."
+          : "Create an employee profile, then generate their onboarding plan from the employee record."
+      }
       action={
         can(user, "employee.create") ? (
           <Link className="button primary" to="/hr/employees/new">
@@ -342,6 +397,7 @@ export function Employees() {
           : {}),
         ...(params.get("status") ? { status: params.get("status")! } : {}),
       }),
+    refetchInterval: 5000,
   });
   const base = `/${w}/${w === "hr" ? "employees" : "team"}`;
   return (
@@ -467,8 +523,12 @@ export function Employees() {
             </div>
           ) : (
             <Empty
-              title="No matching employees"
-              text="Try a different search or add an employee to get started."
+              title={w === "manager" ? "No direct reports assigned yet" : "No matching employees"}
+              text={
+                w === "manager"
+                  ? "HR needs to select your manager account in each employee profile’s Manager field. Once assigned, your direct reports will appear here."
+                  : "Try a different search or add an employee to get started."
+              }
             />
           )}
         </QueryState>
@@ -523,8 +583,23 @@ export function CreateEmployee() {
   });
   const managers = useQuery({
     queryKey: ["manager-options"],
-    queryFn: () => api.employees.list({ pageSize: 100, sort: "lastName" }),
+    queryFn: api.employees.managers,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1,
   });
+  const [selectedManagerId, setSelectedManagerId] = useState("");
+  // Do not render cached manager options from an earlier database/session.
+  // The API returns only linked CLYORA manager accounts; use the list only
+  // after this page has confirmed it with a fresh request.
+  const managerOptions = managers.isFetchedAfterMount && managers.isSuccess
+    ? managers.data
+    : [];
+  const managerSelection = managerOptions.some((manager) => manager.id === selectedManagerId)
+    ? selectedManagerId
+    : managerOptions.length === 1
+      ? managerOptions[0].id
+      : "";
   const [validation, setValidation] = useState("");
   const create = useMutation({
     mutationFn: api.employees.create,
@@ -541,6 +616,7 @@ export function CreateEmployee() {
     );
     const parsed = CreateEmployeeRequestSchema.safeParse({
       ...data,
+      managerId: managerSelection || undefined,
       unionMember: raw.unionMember === "on",
     });
     if (!parsed.success) {
@@ -592,7 +668,7 @@ export function CreateEmployee() {
                 placeholder="alex@clyora"
                 autoComplete="off"
               />
-              <small>Its username prefix is used in Keycloak. The activation email goes to the personal email above.</small>
+              <small>Employees use this CLYORA identity to sign in with Keycloak. The activation email goes to the personal email above.</small>
             </label>
             <label>
               Department
@@ -606,16 +682,30 @@ export function CreateEmployee() {
               </select>
             </label>
             <label>
-              Reporting manager
-              <select name="managerId">
-                <option value="">Not assigned</option>
-                {managers.data?.items.map((person) => (
+              Reporting manager *
+              <select
+                name="managerId"
+                required
+                value={managerSelection}
+                onChange={(event) => setSelectedManagerId(event.target.value)}
+                disabled={!managers.isFetchedAfterMount || managers.isError || !managerOptions.length}
+              >
+                <option value="">Select a manager</option>
+                {managerOptions.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.firstName} {person.lastName} · {person.jobTitle}
+                    {person.firstName} {person.lastName} · {person.jobTitle} ({person.email})
                   </option>
                 ))}
               </select>
-              <small>Choose from the first 100 people in the directory.</small>
+              <small>
+                {!managers.isFetchedAfterMount && !managers.isError
+                  ? "Refreshing linked manager accounts…"
+                  : managers.isError
+                    ? "Manager accounts could not be loaded. Retry before creating the employee."
+                    : managerOptions.length
+                      ? "The employee will appear in this manager’s team as soon as the profile is created."
+                      : "No linked manager account is available. Link David’s manager account before creating an employee."}
+              </small>
             </label>
             <label>
               Location *
@@ -671,10 +761,11 @@ export function CreateEmployee() {
               Union member
             </label>
           </div>
-          {(departments.isError || locations.isError) && (
+          {(departments.isError || locations.isError || managers.isError || managers.isFetchedAfterMount && !managerOptions.length) && (
             <p className="notice danger">
-              Reference data could not be loaded. Refresh this page before
-              creating an employee.
+              {managers.isError || managers.isFetchedAfterMount && !managerOptions.length
+                ? "A linked manager account is required. Confirm David Chen has the manager role and an employee profile, then refresh."
+                : "Reference data could not be loaded. Refresh this page before creating an employee."}
             </p>
           )}
           <div className="form-footer">
@@ -695,6 +786,7 @@ export function CreateEmployee() {
                 type="submit"
                 disabled={
                   create.isPending || locations.isPending || locations.isError
+                  || !managers.isFetchedAfterMount || managers.isError || !managerOptions.length
                 }
               >
                 {create.isPending ? "Creating…" : "Create employee"}
@@ -715,6 +807,7 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
     queryKey: ["employee", id],
     queryFn: () => api.employees.get(id!),
     enabled: !!id,
+    refetchInterval: 5000,
   });
   const [job, setJob] = useState("");
   const [baseline, setBaseline] = useState(false);
@@ -746,6 +839,26 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
         ? false
         : 1500,
   });
+  useEffect(() => {
+    if (state.data?.status !== "SUCCEEDED" || !id) return;
+    void cache.invalidateQueries({ queryKey: ["employee", id] });
+    void cache.invalidateQueries({ queryKey: ["employees"] });
+    void cache.invalidateQueries({ queryKey: ["people"] });
+    void cache.invalidateQueries({ queryKey: ["plans"] });
+    void cache.invalidateQueries({ queryKey: ["work-queue-plans"] });
+    setJob("");
+  }, [cache, id, state.data?.status]);
+  const journeyPlanId = q.data?.activePlanId ?? q.data?.latestPlanId ?? null;
+  const planJobActive = !!job && !["SUCCEEDED", "FAILED"].includes(state.data?.status ?? "");
+  const journeyPlan = useQuery({
+    queryKey: ["plan", journeyPlanId],
+    queryFn: () => api.plans.get(journeyPlanId!),
+    enabled: !!journeyPlanId,
+    refetchInterval: (query) =>
+      query.state.data?.status === "COMPLETED" || query.state.data?.status === "REFUSED"
+        ? false
+        : 4000,
+  });
   if (!id)
     return (
       <Empty
@@ -754,6 +867,34 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
       />
     );
   const e = q.data;
+  const displayedPlanId = journeyPlanId;
+  const journeyStatus = journeyPlan.data?.status ?? e?.latestPlanStatus ?? null;
+  const journeySteps = [
+    { label: "Profile created", done: true },
+    {
+      label: "Plan approved",
+      done: ["APPROVED", "IN_PROGRESS", "AWAITING_COMPLETION_APPROVAL", "COMPLETED"].includes(journeyStatus ?? ""),
+    },
+    {
+      label: "Onboarding tasks",
+      done: ["AWAITING_COMPLETION_APPROVAL", "COMPLETED"].includes(journeyStatus ?? ""),
+    },
+    { label: "HR sign-off", done: journeyStatus === "COMPLETED" },
+  ];
+  const currentJourneyStep = journeyStatus === "COMPLETED"
+    ? journeySteps.length
+    : journeyStatus === "AWAITING_COMPLETION_APPROVAL"
+      ? 3
+      : ["APPROVED", "IN_PROGRESS"].includes(journeyStatus ?? "")
+        ? 2
+        : 1;
+  const totalJourneyTasks = journeyPlan.data?.taskCount ?? 0;
+  const completedJourneyTasks = journeyPlan.data?.completedCount ?? 0;
+  const journeyPercent = journeyStatus === "COMPLETED"
+    ? 100
+    : totalJourneyTasks
+      ? Math.round((completedJourneyTasks / totalJourneyTasks) * 100)
+      : 0;
   return (
     <>
       <Heading
@@ -844,25 +985,65 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
               )}
               <Panel
                 title="Onboarding journey"
-                description="A plan connects the employee to the right work."
+                description="The same milestones and task completion are visible to HR, the manager, and the employee."
               >
                 <div className="panel-body form-vertical">
-                  {e.activePlanId ? (
+                  <section aria-label="Employee onboarding progress" className="employee-journey-progress">
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                      <strong>{journeyStatus ? human(journeyStatus) : "Profile created"}</strong>
+                      <span className="badge">Step {currentJourneyStep} of {journeySteps.length}</span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label="Onboarding task completion"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={journeyPercent}
+                      style={{ height: 8, background: "var(--border)", borderRadius: 999, overflow: "hidden", marginTop: 10 }}
+                    >
+                      <div style={{ width: `${journeyPercent}%`, height: "100%", background: "var(--primary)", transition: "width 250ms ease" }} />
+                    </div>
+                    <small style={{ color: "var(--muted)" }}>
+                      {displayedPlanId
+                        ? `${completedJourneyTasks} of ${totalJourneyTasks} onboarding tasks completed`
+                        : "Waiting for HR to generate and approve the onboarding plan"}
+                    </small>
+                    <ol style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8, listStyle: "none", padding: 0, margin: "10px 0 0" }}>
+                      {journeySteps.map((step, index) => {
+                        const isCurrent = !step.done && index + 1 === currentJourneyStep;
+                        return (
+                          <li key={step.label} aria-current={isCurrent ? "step" : undefined} style={{ display: "flex", alignItems: "center", gap: 7, color: step.done ? "#15803d" : isCurrent ? "var(--primary)" : "var(--muted)", fontSize: 12, fontWeight: isCurrent ? 700 : 600 }}>
+                            <span aria-hidden="true" style={{ width: 20, height: 20, display: "inline-grid", placeItems: "center", flex: "0 0 20px", borderRadius: "50%", border: `1px solid ${step.done ? "#86efac" : isCurrent ? "var(--primary)" : "var(--border)"}`, background: step.done ? "#f0fdf4" : "white" }}>
+                              {step.done ? "✓" : index + 1}
+                            </span>
+                            {step.label}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </section>
+                  {displayedPlanId ? (
                     <div className="active-plan-card">
                       <div className="active-plan-header">
                         <span className="badge" style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" }}>
-                          Active plan available
+                          {journeyStatus === "COMPLETED"
+                            ? "Onboarding completed"
+                            : "Onboarding plan available"}
                         </span>
                       </div>
                       <p style={{ margin: "4px 0 10px", fontSize: "13px", color: "var(--muted)" }}>
-                        An onboarding plan is currently active for this employee.
+                        {journeyStatus === "COMPLETED"
+                          ? "HR has completed final sign-off. The employee journey is complete."
+                          : `Current stage: ${human(journeyStatus ?? "DRAFT")}. Plan tasks and progress are available.`}
                       </p>
                       <Link
                         className="button primary"
-                        to={`/${w}/${w === "hr" ? "plans" : "onboarding"}/${e.activePlanId}`}
+                        to={`/${w}/${w === "hr" ? "plans" : "onboarding"}/${displayedPlanId}`}
                         style={{ alignSelf: "flex-start" }}
                       >
-                        Open active plan <ArrowRight size={16} />
+                        {journeyStatus === "COMPLETED"
+                          ? "View completed journey"
+                          : "Open onboarding plan"} <ArrowRight size={16} />
                       </Link>
                     </div>
                   ) : (
@@ -888,13 +1069,17 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
                       </label>
                       <button
                         className={`button ${e.activePlanId ? "secondary" : "primary"}`}
-                        disabled={generate.isPending || !!job}
+                        disabled={generate.isPending || planJobActive}
                         onClick={() => generate.mutate()}
                         style={{ alignSelf: "flex-start" }}
                       >
                         {generate.isPending
                           ? "Starting…"
-                          : "Generate onboarding plan"}
+                          : planJobActive
+                            ? "Generating plan…"
+                            : state.data?.status === "FAILED"
+                              ? "Try plan generation again"
+                              : "Generate onboarding plan"}
                       </button>
                       <Feedback error={generate.error} />
                     </div>
@@ -928,7 +1113,7 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
               {can(user, "employee.update") && (
                 <Panel
                   title="Offboarding"
-                  description="Record departure and initiate the existing offboarding workflow."
+                  description="Remove portal access and record the departure. The employee record stays in the directory for audit history."
                 >
                   <form
                     className="panel-body form-vertical"
@@ -960,7 +1145,7 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
                       error={offboard.error}
                       success={
                         offboard.isSuccess
-                          ? "Offboarding request saved."
+                          ? "Access revoked and status set to Withdrawn. The record remains available for audit history."
                           : undefined
                       }
                     />
@@ -985,6 +1170,7 @@ export function Plans({ approvals = false }: { approvals?: boolean }) {
         pageSize: 20,
         ...(params.get("status") ? { status: params.get("status")! } : {}),
       }),
+    refetchInterval: 5000,
   });
   const rows = approvals
     ? q.data?.items.filter((p) =>
@@ -1074,6 +1260,34 @@ export function Plans({ approvals = false }: { approvals?: boolean }) {
     </>
   );
 }
+const roleHelper = (role: string) => {
+  const r = (role || "").toLowerCase();
+  if (r === "hr" || r === "hr_admin") return { label: "HR Operations", cls: "role-hr" };
+  if (r === "it" || r === "it_admin") return { label: "IT Support", cls: "role-it" };
+  if (r === "manager") return { label: "Manager", cls: "role-manager" };
+  if (r === "employee") return { label: "Employee", cls: "role-employee" };
+  return { label: human(role), cls: "role-hr" };
+};
+
+const getHrAction = (service: string) => {
+  switch ((service || "").toUpperCase()) {
+    case "DOCUMENTS":
+      return { path: "/hr/documents", label: "Review documents" };
+    case "EQUIPMENT":
+      return { path: "/hr/equipment", label: "Fulfill hardware" };
+    case "PAYROLL":
+      return { path: "/hr/payroll", label: "Payroll setup" };
+    case "BENEFITS":
+      return { path: "/hr/benefits", label: "Manage benefits" };
+    case "TRAINING":
+      return { path: "/hr/training", label: "Training modules" };
+    case "MANAGER":
+      return { path: "/hr/manager-tasks", label: "Manager milestones" };
+    default:
+      return { path: "/hr/tasks", label: "Open owner queue" };
+  }
+};
+
 export function TaskRows({
   tasks,
   review = false,
@@ -1113,70 +1327,101 @@ export function TaskRows({
               </tr>
             </thead>
             <tbody>
-              {tasks.map((t) => (
-                <tr key={t.id}>
-                  <td>
-                    <strong>{cleanDisplayName(t.title)}</strong>
-                    <small>
-                      {human(t.service)} · {t.dependsOn.length} dependencies
-                    </small>
-                    {t.description && (
-                      <details>
-                        <summary>Details & policy sources</summary>
-                        <p>{cleanDisplayDescription(t.description)}</p>
-                        {t.citations.map((c) => (
-                          <blockquote key={c.id}>
-                            {c.quotedText}
-                            <small>
-                              {c.documentTitle} · {c.clauseId}
-                              {c.isMock ? " · Sample policy" : ""}
-                            </small>
-                          </blockquote>
-                        ))}
-                        {t.riskReason && (
-                          <p className="notice warning">{t.riskReason}</p>
-                        )}
-                      </details>
-                    )}
-                  </td>
-                  <td>{human(t.ownerRole)}</td>
-                  <td>{date(t.dueDate)}</td>
-                  <td>
-                    <Badge value={t.status} />
-                  </td>
-                  <td>
-                    {review && can(user, "plan.approve") ? (
-                      <button
-                        className="button secondary small"
-                        disabled={update.isPending}
-                        onClick={() =>
-                          update.mutate({
-                            t,
-                            reviewState:
-                              t.reviewState === "OK" ? "NEEDS_REVIEW" : "OK",
-                          })
-                        }
-                      >
-                        {update.isPending && update.variables?.t.id === t.id
-                          ? "Saving…"
-                          : t.reviewState === "OK"
-                          ? "Reopen review"
-                          : "Mark reviewed"}
-                      </button>
-                    ) : t.status === "COMPLETED" || t.status === "SKIPPED" ? (
-                      <Badge value={t.reviewState} />
-                    ) : workspaceFor(user!) === "manager" && t.service === "MANAGER" ? (
-                      <Link className="button secondary small" to="/manager/tasks">Open manager task</Link>
-                    ) : workspaceFor(user!) === "employee" && ["DOCUMENTS", "TRAINING", "BENEFITS"].includes(t.service) ? (
-                      <Link className="button secondary small" to={`/employee/${t.service.toLowerCase() === "documents" ? "documents" : t.service.toLowerCase()}`}>Continue task</Link>
-                    ) : workspaceFor(user!) === "hr" ? (
-                      <Link className="button secondary small" to={`/hr/${({ DOCUMENTS: "documents", EQUIPMENT: "equipment", PAYROLL: "payroll", BENEFITS: "benefits", TRAINING: "training", MANAGER: "manager-tasks" } as Record<string, string>)[t.service] ?? "tasks"}`}>Open owner queue</Link>
-                    ) : (
-                      <span className="muted">Owned by {human(t.ownerRole)}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {tasks.map((t) => {
+                const role = roleHelper(t.ownerRole);
+                const hrAction = getHrAction(t.service);
+                const prereqCount = t.dependsOn?.length ?? 0;
+                return (
+                  <tr key={t.id}>
+                    <td>
+                      <strong style={{ display: "block", fontSize: "13.5px", marginBottom: "3px" }}>
+                        {cleanDisplayName(t.title)}
+                      </strong>
+                      <small style={{ color: "var(--muted)", fontSize: "12px" }}>
+                        {human(t.service)} · {prereqCount === 0 ? "No prerequisites" : `${prereqCount} prerequisite${prereqCount > 1 ? "s" : ""}`}
+                      </small>
+                      {t.description && (
+                        <details className="task-context-details">
+                          <summary>Details & policy sources</summary>
+                          <div className="task-context-body">
+                            <p style={{ margin: "0 0 8px", color: "#334155", lineHeight: "1.5" }}>
+                              {cleanDisplayDescription(t.description)}
+                            </p>
+                            {t.citations.map((c) => (
+                              <div key={c.id} className="task-citation-card">
+                                <div style={{ fontStyle: "italic", marginBottom: "4px" }}>"{c.quotedText}"</div>
+                                <div style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>
+                                  {c.documentTitle} · {c.clauseId}
+                                  {c.isMock ? " · Sample policy (illustrative)" : ""}
+                                </div>
+                              </div>
+                            ))}
+                            {t.riskReason && (
+                              <p className="notice warning" style={{ marginTop: "8px", fontSize: "12px" }}>
+                                {t.riskReason}
+                              </p>
+                            )}
+                          </div>
+                        </details>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`role-badge ${role.cls}`}>{role.label}</span>
+                    </td>
+                    <td style={{ fontSize: "13px", color: "#475569", whiteSpace: "nowrap" }}>
+                      {date(t.dueDate)}
+                    </td>
+                    <td>
+                      <Badge value={t.status} />
+                    </td>
+                    <td>
+                      {review && can(user, "plan.approve") ? (
+                        <button
+                          className={`button small ${t.reviewState === "OK" ? "secondary" : "primary"}`}
+                          disabled={update.isPending}
+                          onClick={() =>
+                            update.mutate({
+                              t,
+                              reviewState:
+                                t.reviewState === "OK" ? "NEEDS_REVIEW" : "OK",
+                            })
+                          }
+                          style={{ fontSize: "12px", gap: "4px" }}
+                        >
+                          {update.isPending && update.variables?.t.id === t.id ? (
+                            "Saving…"
+                          ) : t.reviewState === "OK" ? (
+                            <>
+                              <CheckCircle2 size={13} color="#16a34a" /> Reviewed
+                            </>
+                          ) : (
+                            "Mark reviewed"
+                          )}
+                        </button>
+                      ) : t.status === "COMPLETED" || t.status === "SKIPPED" ? (
+                        <Badge value={t.reviewState} />
+                      ) : workspaceFor(user!) === "manager" && t.service === "MANAGER" ? (
+                        <Link className="action-btn-styled" to="/manager/tasks">
+                          Open manager task <ArrowRight size={13} />
+                        </Link>
+                      ) : workspaceFor(user!) === "employee" && ["DOCUMENTS", "TRAINING", "BENEFITS"].includes(t.service) ? (
+                        <Link
+                          className="action-btn-styled"
+                          to={`/employee/${t.service.toLowerCase() === "documents" ? "documents" : t.service.toLowerCase()}`}
+                        >
+                          Continue task <ArrowRight size={13} />
+                        </Link>
+                      ) : workspaceFor(user!) === "hr" ? (
+                        <Link className="action-btn-styled" to={hrAction.path}>
+                          {hrAction.label} <ArrowRight size={13} />
+                        </Link>
+                      ) : (
+                        <span className="muted" style={{ fontSize: "12px" }}>Assigned to {role.label}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1191,6 +1436,7 @@ export function Tasks() {
   const plans = useQuery({
     queryKey: ["work-queue-plans"],
     queryFn: () => api.plans.list({ pageSize: 100 }),
+    refetchInterval: 5000,
   });
   const activePlans = (plans.data?.items ?? []).filter(
     (plan) => !["COMPLETED", "CANCELLED", "REFUSED"].includes(plan.status),
@@ -1212,6 +1458,7 @@ export function Tasks() {
         ...(params.get("status") ? { status: params.get("status")! } : {}),
       }),
     enabled: !!selectedPlanId,
+    refetchInterval: selectedPlanId ? 5000 : false,
   });
   const search = (params.get("search") ?? "").toLowerCase();
   const items =
@@ -1304,6 +1551,10 @@ export function PlanDetails() {
   const q = useQuery({
     queryKey: ["plan", planId],
     queryFn: () => api.plans.get(planId!),
+    refetchInterval: (query) =>
+      query.state.data?.status === "COMPLETED" || query.state.data?.status === "REFUSED"
+        ? false
+        : 5000,
   });
   const findings = useQuery({
     queryKey: ["findings", planId],
@@ -1336,6 +1587,20 @@ export function PlanDetails() {
     },
   });
   const p = q.data;
+  const reviewAll = useMutation({
+    mutationFn: async () => {
+      const pending = (p?.tasks ?? []).filter((t: any) => t.reviewState === "NEEDS_REVIEW");
+      await Promise.all(
+        pending.map((t: any) =>
+          api.plans.updateTask(planId!, t.id, {
+            reviewState: "OK",
+            reason: "Batch reviewed by HR admin",
+          }),
+        ),
+      );
+    },
+    onSuccess: () => void cache.invalidateQueries(),
+  });
   return (
     <>
       <Heading
@@ -1345,18 +1610,62 @@ export function PlanDetails() {
       <QueryState query={q}>
         {p && (
           <>
-            <div className="record-summary">
-              <Badge value={p.status} />
-              <span>{p.jurisdictionCode}</span>
-              <span>Joining {date(p.startDate)}</span>
-              <span>{human(p.generationMode)}</span>
-              <Progress done={p.completedCount} total={p.taskCount} />
+            {/* Enterprise Plan Hero Card */}
+            <div className="plan-hero-card">
+              <div className="plan-hero-top">
+                <div className="plan-hero-badge-row">
+                  <Badge value={p.status} />
+                  <span className="plan-meta-pill">
+                    <MapPin size={13} style={{ color: "var(--primary)" }} />
+                    {p.jurisdictionCode === "IN-KA"
+                      ? "Karnataka, India (IN-KA)"
+                      : p.jurisdictionCode === "CA-ON"
+                      ? "Ontario, Canada (CA-ON)"
+                      : p.jurisdictionCode}
+                  </span>
+                  <span className="plan-meta-pill">
+                    <Calendar size={13} style={{ color: "#64748b" }} />
+                    First day: {date(p.startDate)}
+                  </span>
+                  <span className="plan-meta-pill">
+                    <Sparkles size={13} />
+                    {p.generationMode === "BASELINE_FALLBACK"
+                      ? "Policy-template plan"
+                      : p.generationMode === "LLM_GROUNDED"
+                      ? "AI-assisted draft"
+                      : human(p.generationMode)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="plan-hero-progress-container">
+                <div className="plan-progress-header">
+                  <span className="plan-progress-title">Onboarding Journey Progress</span>
+                  <span className="plan-progress-percent">
+                    {p.taskCount ? Math.round((p.completedCount / p.taskCount) * 100) : 0}%
+                  </span>
+                </div>
+                <div className="plan-progress-track">
+                  <div
+                    className="plan-progress-fill"
+                    style={{
+                      width: `${p.taskCount ? Math.round((p.completedCount / p.taskCount) * 100) : 0}%`,
+                    }}
+                  />
+                </div>
+                <span className="plan-progress-sub">
+                  {p.completedCount} of {p.taskCount} tasks completed
+                </span>
+              </div>
             </div>
+
             {p.refusalReason && (
               <p className="notice danger">{p.refusalReason}</p>
             )}
             {p.degradedReason && (
-              <p className="notice warning">{p.degradedReason}</p>
+              <p className="notice warning" role="note">
+                {p.degradedReason} Review the cited source material and plan before HR approval.
+              </p>
             )}
             {p.status === "AWAITING_COMPLETION_APPROVAL" && (
               <p className="notice" role="status">
@@ -1393,7 +1702,7 @@ export function PlanDetails() {
                   className={tab === t ? "active" : ""}
                 >
                   {t}
-                  {t === "Tasks" && <span>{p.taskCount}</span>}
+                  {t === "Tasks" && <span className="tab-counter-badge">{p.taskCount}</span>}
                 </button>
               ))}
             </div>
@@ -1497,6 +1806,38 @@ export function PlanDetails() {
                         this decision.
                       </span>
                     </label>
+                    {p.tasks.some((t: any) => (t.authorityClass === "PAY_AFFECTING" || t.authorityClass === "LEGAL") && t.reviewState === "NEEDS_REVIEW") && (
+                      <div
+                        className="notice warning"
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 14,
+                          gap: 14,
+                          padding: "12px 16px",
+                          borderRadius: "10px",
+                          background: "#fffbeb",
+                          border: "1px solid #fde68a",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <ShieldCheck size={20} color="#d97706" />
+                          <span style={{ fontSize: "13px", color: "#92400e" }}>
+                            <strong>Compliance Check:</strong> Statutory payroll and identity tasks require HR review before dispatch.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="button primary small"
+                          disabled={reviewAll.isPending}
+                          onClick={() => reviewAll.mutate()}
+                          style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+                        >
+                          {reviewAll.isPending ? "Reviewing…" : "⚡ Mark all as reviewed"}
+                        </button>
+                      </div>
+                    )}
                     <Feedback
                       error={approval.error}
                       success={
