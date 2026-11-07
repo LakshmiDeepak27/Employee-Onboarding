@@ -54,6 +54,10 @@ const BASE = "/api/v1";
 
 let accessToken: string | null = null;
 
+export function cleanTaskTitle(title: string) {
+  return title.replace(/^DEMO\s*[—-]\s*/i, "").trim();
+}
+
 export function setAccessToken(token: string | null) {
   accessToken = token;
 }
@@ -292,15 +296,23 @@ export const api = {
   },
 
   tasks: {
-    list: (params: Record<string, string | number> = {}) =>
-      request<{
+    list: async (params: Record<string, string | number> = {}) => {
+      const response = await request<{
         items: PlanTask[];
         meta: { totalItems: number; totalPages: number };
       }>(
         `/tasks?${new URLSearchParams(
           Object.entries(params).map(([k, v]) => [k, String(v)]),
         )}`,
-      ),
+      );
+      return {
+        ...response,
+        items: response.items.map((task) => ({
+          ...task,
+          title: cleanTaskTitle(task.title),
+        })),
+      };
+    },
   },
 
   policies: {
