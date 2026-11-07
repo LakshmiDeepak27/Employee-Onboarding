@@ -9,7 +9,7 @@ CLYORA coordinates employee onboarding across HR, managers, IT, finance, and emp
 | Resource | Link |
 | --- | --- |
 | Live deployment | **Coming soon** — add the public HTTPS URL when deployed. |
-| Video presentation | **Coming soon** — add the recording URL when published. |
+| Video presentation | https://www.loom.com/share/57e37b5edbe94a6688d5ce0363482b9b |
 | Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
 | API reference (local) | `http://localhost:4000/docs` after starting the API |
 
