@@ -210,8 +210,8 @@ async function seedCatalogs() {
  * scope rules are visible immediately:
  *   asha.hr@clyora sees everything
  *   it.admin@clyora sees equipment work only
- *   david.manager@clyora sees only priya (their direct report)
- *   priya@clyora sees only herself
+ *   ravi.manager@clyora sees only ananya (their direct report)
+ *   ananya@clyora sees only herself
  */
 async function seedDemoUsers() {
   console.log('  demo users and employees...');
@@ -234,8 +234,8 @@ async function seedDemoUsers() {
 
   const hrUser = await makeUser('asha.hr@clyora', 'hr_admin');
   const itUser = await makeUser('it.admin@clyora', 'it_admin');
-  const mgrUser = await makeUser('david.manager@clyora', 'manager');
-  const empUser = await makeUser('priya@clyora', 'employee');
+  const mgrUser = await makeUser('ravi.manager@clyora', 'manager');
+  const empUser = await makeUser('ananya@clyora', 'employee');
 
   const eng = await prisma.department.findUniqueOrThrow({ where: { code: 'ENG' } });
 
@@ -304,9 +304,9 @@ async function seedDemoUsers() {
 
   const mgrEmp = await makeEmployee({
     employeeNumber: 'EMP-0002',
-    firstName: 'David',
-    lastName: 'Chen',
-    personalEmail: 'david@clyora.com',
+    firstName: 'Ravi',
+    lastName: 'Menon',
+    personalEmail: 'ravi@clyora.com',
     userId: mgrUser.id,
     jurisdictionCode: 'CA-ON',
     employmentType: 'FULL_TIME',
@@ -316,12 +316,12 @@ async function seedDemoUsers() {
     workMode: 'HYBRID',
   });
 
-  // Priya reports to David. This pair is what proves REPORTS scope works.
+  // Ananya reports to Ravi. This pair proves REPORTS scope works.
   await makeEmployee({
     employeeNumber: 'EMP-0003',
-    firstName: 'Priya',
+    firstName: 'Ananya',
     lastName: 'Nair',
-    personalEmail: 'priya@clyora.com',
+    personalEmail: 'ananya@clyora.com',
     userId: empUser.id,
     managerId: mgrEmp.id,
     jurisdictionCode: 'CA-ON',
@@ -332,33 +332,15 @@ async function seedDemoUsers() {
     workMode: 'HYBRID',
   });
 
-  // Not David's report. Manager scope must NOT reach this one.
-  await makeEmployee({
-    employeeNumber: 'EMP-0004',
-    firstName: 'Tom',
-    lastName: 'Webb',
-    personalEmail: 'tom@clyora.com',
-    managerId: hrEmp.id,
-    jurisdictionCode: 'GB',
-    employmentType: 'FULL_TIME',
-    startInDays: 14,
-    jobTitle: 'Software Engineer',
-    roleFamily: 'engineering',
-    workMode: 'ONSITE',
+  await prisma.onboardingPlan.deleteMany({
+    where: {
+      employee: {
+        employeeNumber: { in: ['EMP-0004', 'EMP-0005'] },
+      },
+    },
   });
-
-  // Singapore contractor: no policy corpus, so plan generation must REFUSE.
-  await makeEmployee({
-    employeeNumber: 'EMP-0005',
-    firstName: 'Wei',
-    lastName: 'Lim',
-    personalEmail: 'wei@clyora.com',
-    jurisdictionCode: 'SG',
-    employmentType: 'CONTRACTOR',
-    startInDays: 21,
-    jobTitle: 'Contract Designer',
-    roleFamily: 'design',
-    workMode: 'REMOTE',
+  await prisma.employee.deleteMany({
+    where: { employeeNumber: { in: ['EMP-0004', 'EMP-0005'] } },
   });
 }
 

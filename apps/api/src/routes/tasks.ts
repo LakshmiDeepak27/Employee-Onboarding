@@ -9,13 +9,17 @@ import { employeeScopeFilter } from "../rbac/scope.js";
 export const tasksRouter = Router();
 tasksRouter.use(authenticate);
 
+function cleanTaskTitle(title: string) {
+  return title.replace(/^DEMO\s*[—-]\s*/i, "").trim();
+}
+
 function presentTask(t: any) {
   return {
     id: t.id,
     planId: t.planId,
     taskType: t.taskType,
     service: t.service,
-    title: t.title,
+    title: cleanTaskTitle(t.title),
     description: t.description,
     ownerRole: t.ownerRole,
     assigneeUserId: t.assigneeUserId,

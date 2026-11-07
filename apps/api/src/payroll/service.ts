@@ -155,8 +155,19 @@ export async function getPayroll(req: Request, taskId: string) {
   requireAuth(req);
   return transaction(async (tx) => {
     const task = await loadTask(tx, req, taskId);
-    const row = await tx.payrollSetup.findUnique({ where: { taskId } });
-    if (!row) throw notFound('Payroll setup');
+    let row = await tx.payrollSetup.findUnique({ where: { taskId } });
+    if (!row) {
+      if (typeof tx.payrollSetup.create !== "function") {
+        throw notFound('Payroll setup');
+      }
+      row = await tx.payrollSetup.create({
+        data: {
+          taskId,
+          employeeId: task.plan.employeeId,
+          status: 'PENDING',
+        },
+      });
+    }
     assertEmployee(row, task);
     return present(tx, row);
   });

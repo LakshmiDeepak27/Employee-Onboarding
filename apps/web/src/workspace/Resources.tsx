@@ -624,7 +624,7 @@ export function Policies({ assistant = false }: { assistant?: boolean }) {
                     Version {p.version} · Effective {date(p.effectiveFrom)}
                   </p>
                   <div className="policy-meta">
-                    <Badge value={p.isMock ? "DEMO_POLICY" : "POLICY"} />
+                    <Badge value="POLICY" />
                     <span>{p.clauseCount ?? 0} clauses</span>
                   </div>
                 </article>
