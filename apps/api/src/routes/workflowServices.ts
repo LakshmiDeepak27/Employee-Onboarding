@@ -713,20 +713,30 @@ workflowRouter.put(
         where: { id: req.params.taskId },
         include: { plan: true },
       });
-      if (!task) throw notFound("Task");
+      if (!task || task.service !== "PAYROLL") throw notFound("Payroll task");
+      if (!["APPROVED", "IN_PROGRESS"].includes(task.plan.status))
+        throw conflict("The onboarding plan must be approved before payroll setup can begin.");
 
       // Security decision: never persist raw bank numbers or national IDs. Extract last 4 only!
       const bankLast4 = b.bankAccountNumber
         ? b.bankAccountNumber.slice(-4)
         : undefined;
       const nationalIdLast4 = b.nationalId ? b.nationalId.slice(-4) : undefined;
+      const existing = await prisma.payrollSetup.findUnique({ where: { taskId: task.id } });
+      const taxFormReceived = b.taxFormReceived ?? Boolean(existing?.taxFormReceivedAt);
+      const hasBankDetails = Boolean(bankLast4 ?? existing?.bankAccountLast4);
+      const setupStatus = !taxFormReceived
+        ? "AWAITING_TAX_FORM"
+        : !hasBankDetails
+          ? "AWAITING_BANK_DETAILS"
+          : "READY";
 
       const payroll = await prisma.payrollSetup.upsert({
         where: { taskId: req.params.taskId! },
         create: {
           taskId: req.params.taskId!,
           employeeId: task.plan.employeeId,
-          status: "READY",
+          status: setupStatus,
           payFrequency: b.payFrequency ?? "SEMIMONTHLY",
           salaryCurrency: b.salaryCurrency ?? "INR",
           taxFormType: b.taxFormType ?? "TD1",
@@ -735,7 +745,7 @@ workflowRouter.put(
           nationalIdLast4: nationalIdLast4 ?? null,
         },
         update: {
-          status: "READY",
+          status: setupStatus,
           ...(b.payFrequency ? { payFrequency: b.payFrequency } : {}),
           ...(b.salaryCurrency ? { salaryCurrency: b.salaryCurrency } : {}),
           ...(b.taxFormType ? { taxFormType: b.taxFormType } : {}),
@@ -789,9 +799,11 @@ workflowRouter.post(
 
       const payroll = await prisma.payrollSetup.findUnique({
         where: { taskId: req.params.taskId },
-        include: { task: true },
+        include: { task: { include: { plan: true } } },
       });
       if (!payroll) throw notFound("Payroll setup");
+      if (!["APPROVED", "IN_PROGRESS"].includes(payroll.task.plan.status))
+        throw conflict("The onboarding plan must be approved before payroll can be verified.");
 
       if (!payroll.taxFormReceivedAt || !payroll.bankAccountLast4)
         throw conflict(
@@ -1196,8 +1208,8 @@ workflowRouter.get(
           employeeName: `${m.plan.employee.firstName} ${m.plan.employee.lastName}`,
           planId: m.planId,
           planStatus: m.plan.status,
-          taskTitle: m.title,
-          taskDescription: m.description,
+          taskTitle: m.title.replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "").replace(/\s*\(demo\)\s*$/i, "").trim(),
+          taskDescription: m.description?.replace(/^Demonstration workflow template\. HR must review and replace it with approved company content before real onboarding\./i, "Starter task for the onboarding workflow. Confirm details with HR before completion."),
           taskStatus: m.status,
           dueDate: m.dueDate.toISOString().slice(0, 10),
           blockedBy: m.dependencies

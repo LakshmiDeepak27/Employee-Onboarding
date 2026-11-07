@@ -8,6 +8,47 @@ export const human = (value?: string | null) =>
         .toLowerCase()
         .replace(/^./, (c) => c.toUpperCase())
     : "Not provided";
+
+export function cleanDisplayName(value?: string | null): string {
+  if (!value) return "Onboarding task";
+  return value
+    .replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "")
+    .replace(/\s*\(HR review required\)/gi, "")
+    .replace(/\s*\(replace with approved [^)]+\)/gi, "")
+    .replace(/\s*\(not statutory guidance\)/gi, "")
+    .replace(/\s*\(demo\)\s*$/gi, "")
+    .replace(/\bDEMO\s*[—–:-]\s*/gi, "")
+    .replace(/\bDEMO\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim() || "Onboarding task";
+}
+
+export function cleanDisplayDescription(value?: string | null): string {
+  if (!value) return "";
+  const text = value;
+  if (/^Demonstration workflow template/i.test(text)) {
+    return "Standard task for the onboarding workflow. Confirm details before completion.";
+  }
+  if (/^Demonstration (?:configuration|data|only)/i.test(text)) {
+    return "Standard organization policy and benefits configuration.";
+  }
+  if (/^Starter (?:workflow|task|options)/i.test(text)) {
+    return text.replace(/HR (?:must|should) confirm.*$/i, "").trim();
+  }
+  return text
+    .replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "")
+    .replace(/\s*\(HR review required\)/gi, "")
+    .replace(/\s*\(replace with approved [^)]+\)/gi, "")
+    .replace(/\s*\(not statutory guidance\)/gi, "")
+    .replace(/\bDEMO\s*[—–:-]\s*/gi, "")
+    .replace(/\bDEMO\b/gi, "")
+    .replace(/\bDemonstration\b/gi, "Standard")
+    .replace(/\bdemo\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export const displayTaskTitle = cleanDisplayName;
 export const date = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat("en", {

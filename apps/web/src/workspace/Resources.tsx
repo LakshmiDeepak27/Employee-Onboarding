@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -9,7 +9,7 @@ import {
   BookOpen,
   ShieldCheck,
 } from "lucide-react";
-import { api, request, can, getAccessToken } from "../lib/api";
+import { api, request, can, getAccessToken, ApiError } from "../lib/api";
 import { useSession, workspaceFor } from "./session";
 import {
   Heading,
@@ -21,6 +21,9 @@ import {
   human,
   date,
   Metric,
+  displayTaskTitle,
+  cleanDisplayName,
+  cleanDisplayDescription,
 } from "./ui";
 
 type ServiceRow = {
@@ -267,18 +270,18 @@ export function ServicePage({ service }: { service: Service }) {
                   </span>
                   <div className="service-content">
                     <h3>
-                      {row.taskTitle ?? row.course?.title ??
+                      {cleanDisplayName(row.taskTitle ?? row.course?.title ??
                         row.benefitPlan?.name ??
                         row.catalogItem?.name ??
                         row.catalog?.name ??
-                        human(row.documentType ?? row.kind)}
+                        human(row.documentType ?? row.kind))}
                     </h3>
                     <p>
-                      {row.employeeName ? `For ${row.employeeName}. ` : ""}{row.taskDescription ?? row.course?.description ??
+                      {row.employeeName ? `For ${row.employeeName}. ` : ""}{cleanDisplayDescription(row.taskDescription ?? row.course?.description ??
                         row.benefitPlan?.description ??
                         row.notes ??
                         (row.document?.fileName ||
-                          "Assigned through an approved onboarding plan.")}
+                          "Assigned through an approved onboarding plan."))}
                     </p>
                     <small>
                       {row.dueDate
@@ -619,7 +622,7 @@ export function Policies({ assistant = false }: { assistant?: boolean }) {
                   <span className="eyebrow">
                     {p.jurisdictionCode} · {human(p.category)}
                   </span>
-                  <h2>{p.title}</h2>
+                  <h2>{cleanDisplayName(p.title)}</h2>
                   <p>
                     Version {p.version} · Effective {date(p.effectiveFrom)}
                   </p>
@@ -774,24 +777,6 @@ export function Audit() {
 }
 export function Settings() {
   const { user } = useSession();
-  const change = useMutation({
-    mutationFn: (body: Record<string, string>) =>
-      request<{ message: string }>("/auth/change-password", {
-        method: "POST",
-        body,
-      }),
-    onSuccess: () => {
-      window.dispatchEvent(new Event("session-expired"));
-    },
-  });
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<
-      string,
-      string
-    >;
-    change.mutate(f);
-  }
   return (
     <>
       <Heading
@@ -816,53 +801,20 @@ export function Settings() {
               </dd>
             </div>
           </dl>
-          <details className="panel-body">
+          <details className="panel-body permission-disclosure">
             <summary>View effective permissions</summary>
             <ul className="permission-list">
               {user?.permissions.map((p) => (
                 <li key={p.key}>
-                  <code>{p.key}</code>
+                  <span>{human(p.key)}</span>
                   <Badge value={p.scope} />
                 </li>
               ))}
             </ul>
           </details>
         </Panel>
-        <Panel
-          title="Change password"
-          description="Changing your password revokes your existing sessions."
-        >
-          <form className="panel-body form-vertical" onSubmit={submit}>
-            <label>
-              Current password
-              <input
-                type="password"
-                name="currentPassword"
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <label>
-              New password
-              <input
-                type="password"
-                name="newPassword"
-                autoComplete="new-password"
-                minLength={12}
-                required
-              />
-            </label>
-            <Feedback error={change.error} success={change.data?.message} />
-            {change.isSuccess ? (
-              <Link className="button primary" to="/login">
-                Sign in again
-              </Link>
-            ) : (
-            <button className="button primary" disabled={change.isPending}>
-              {change.isPending ? "Updating password…" : "Update password"}
-              </button>
-            )}
-          </form>
+        <Panel title="Sign-in security" description="Your organization manages passwords, multi-factor authentication and account recovery through secure sign-in.">
+          <div className="panel-body auth-settings-card"><ShieldCheck size={24}/><p>Use your organization sign-in provider to update your password or security settings. CLYORA never stores or changes your provider password.</p><a className="button secondary" href="/api/v1/auth/oidc/start">Open organization sign-in</a></div>
         </Panel>
       </div>
     </>
@@ -921,6 +873,8 @@ export function Help() {
 }
 
 export function Payroll() {
+  const { user } = useSession();
+  const canVerify = can(user, "payroll.verify");
   const [params, setParams] = useSearchParams();
   const id = params.get("task") ?? "";
   const tasks = useQuery({
@@ -929,7 +883,10 @@ export function Payroll() {
   });
   const setup = useQuery({
     queryKey: ["payroll", id],
-    queryFn: () => api.payroll.get(id),
+    queryFn: async () => {
+      try { return await api.payroll.get(id); }
+      catch (error) { if (error instanceof ApiError && error.status === 404) return null; throw error; }
+    },
     enabled: !!id,
   });
   const cache = useQueryClient();
@@ -946,6 +903,10 @@ export function Payroll() {
       void cache.invalidateQueries();
     },
   });
+  const payrollStatus = setup.data?.status ?? "PENDING";
+  const taxComplete = Boolean(setup.data?.taxFormReceivedAt);
+  const bankComplete = Boolean(setup.data?.bankAccountLast4);
+  const payrollVerified = payrollStatus === "VERIFIED";
   return (
     <>
       <Heading
@@ -953,6 +914,7 @@ export function Payroll() {
         description="Configure the required details, then explicitly verify before completing the task. Sensitive fields are limited to authorized roles."
       />
       <Panel title="Payroll task">
+        <p className="panel-body payroll-intro">Complete the employee’s tax and bank setup. Payroll becomes ready for review only after both steps are recorded.</p>
         <div className="toolbar">
           <select
             aria-label="Choose payroll task"
@@ -962,7 +924,7 @@ export function Payroll() {
             <option value="">Select a payroll task</option>
             {tasks.data?.items.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.title.replace(/^DEMO\s*[—-]\s*/i, "").trim()} · {t.dueDate} ·{" "}
+                {displayTaskTitle(t.title)} · {t.dueDate} ·{" "}
                 {t.id.slice(0, 8)}
               </option>
             ))}
@@ -974,7 +936,13 @@ export function Payroll() {
         {id ? (
           <QueryState query={setup}>
             <div className="panel-body">
-              <Badge value={setup.data?.status ?? "PENDING"} />
+              {!setup.data && <p className="notice info">Payroll setup has not been started. Enter the required details and save to create it.</p>}
+              <div className="payroll-status-row"><Badge value={payrollStatus} />{setup.data?.bankAccountLast4 && <span className="muted">Bank account ending in {setup.data.bankAccountLast4}</span>}</div>
+              <ol className="payroll-progress" aria-label="Payroll setup progress">
+                <li className={taxComplete ? "complete" : "current"}><span>1</span><div><strong>Tax form</strong><small>{taxComplete ? "Received" : "Required"}</small></div></li>
+                <li className={bankComplete ? "complete" : taxComplete ? "current" : ""}><span>2</span><div><strong>Bank details</strong><small>{bankComplete ? "Saved securely" : "Required"}</small></div></li>
+                <li className={payrollVerified ? "complete" : bankComplete && taxComplete ? "current" : ""}><span>3</span><div><strong>Review</strong><small>{payrollVerified ? "Verified" : "HR / Finance"}</small></div></li>
+              </ol>
               <form
                 key={id}
                 onSubmit={(e) => {
@@ -1046,6 +1014,7 @@ export function Payroll() {
                     Tax form received and checked
                   </label>
                 </div>
+                <p className="field-hint">The full bank number is never stored; only its last four digits are retained for verification.</p>
                 <Feedback
                   error={save.error}
                   success={
@@ -1056,29 +1025,21 @@ export function Payroll() {
                   {save.isPending ? "Saving payroll details…" : "Save payroll details"}
                 </button>
               </form>
-              <hr />
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={ack}
-                  onChange={(e) => setAck(e.target.checked)}
-                />
-                I have verified the payroll information and accept
-                responsibility for this action.
-              </label>
-              <Feedback
-                error={verify.error}
-                success={verify.isSuccess ? "Payroll verified." : undefined}
-              />
-              <button
-                className="button primary"
-                disabled={
-                  !ack || verify.isPending || setup.data?.status === "VERIFIED"
-                }
-                onClick={() => verify.mutate()}
-              >
-                {verify.isPending ? "Verifying payroll…" : "Verify payroll"}
-              </button>
+              {canVerify ? (
+                <>
+                  <hr />
+                  <label className="checkbox-label">
+                    <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+                    I reviewed the tax and bank details and approve this payroll setup.
+                  </label>
+                  <Feedback error={verify.error} success={verify.isSuccess ? "Payroll verified." : undefined} />
+                  <button className="button primary" disabled={!ack || !setup.data || !taxComplete || !bankComplete || verify.isPending || payrollVerified} onClick={() => verify.mutate()}>
+                    {verify.isPending ? "Verifying payroll…" : payrollVerified ? "Payroll verified" : "Verify payroll"}
+                  </button>
+                </>
+              ) : (
+                <p className="notice">Payroll details are visible to you, but only authorized HR or Finance reviewers can verify them.</p>
+              )}
             </div>
           </QueryState>
         ) : (

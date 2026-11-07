@@ -10,7 +10,7 @@ export const tasksRouter = Router();
 tasksRouter.use(authenticate);
 
 function cleanTaskTitle(title: string) {
-  return title.replace(/^DEMO\s*[—-]\s*/i, "").trim();
+  return title.replace(/^\s*(?:DEMO|SAMPLE)\s*[—–:-]\s*/i, "").replace(/\s*\(demo\)\s*$/i, "").trim();
 }
 
 function presentTask(t: any) {

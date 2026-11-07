@@ -5,6 +5,7 @@ import {
   prisma,
   isDatabaseOnline,
   setDatabaseOnline,
+  databaseUnavailableError,
   type Prisma,
 } from "../db/client.js";
 import { notFound, conflict, badRequest, AppError } from "../lib/errors.js";
@@ -179,7 +180,7 @@ export class OnboardingOrchestrator {
         : !mandatoryRules.some((rule) => rule.service === service),
     );
     if (missingServices.length) {
-      const detail = `No eligible demo/approved template exists for: ${missingServices.join(", ")}. Configure the templates before generating this plan.`;
+      const detail = `No eligible approved template exists for: ${missingServices.join(", ")}. Configure the templates before generating this plan.`;
       try {
         await prisma.escalation.create({ data: { reasonCode: "MISSING_TEMPLATES", detail, assignedRole: "HR" } });
       } catch (error) {
@@ -997,33 +998,29 @@ export class OnboardingOrchestrator {
     },
     actor: { userId: string; role: string },
   ) {
+    if (!isDatabaseOnline()) throw databaseUnavailableError();
     let task: any = null;
-    if (isDatabaseOnline()) {
-      try {
-        task = await prisma.planTask.findFirst({
-          where: { id: taskId, planId },
-          include: {
-            plan: {
-              include: {
-                tasks: {
-                  include: { dependencies: true },
-                },
+    try {
+      task = await prisma.planTask.findFirst({
+        where: { id: taskId, planId },
+        include: {
+          plan: {
+            include: {
+              tasks: {
+                include: { dependencies: true },
               },
             },
           },
-        });
-      } catch {
-        setDatabaseOnline(false);
-      }
+        },
+      });
+    } catch (error) {
+      throw databaseUnavailableError(error);
     }
 
-    const memPlan = IN_MEMORY_PLANS.get(planId);
-    const memTask = memPlan?.tasks?.find((t: any) => t.id === taskId);
-
-    if (!task && !memTask)
+    if (!task)
       throw notFound(`Task with ID ${taskId} on plan ${planId}`);
 
-    const currentTask = task || memTask;
+    const currentTask = task;
     if (task && task.planId !== planId) throw notFound("Task on plan");
     if (task && ["AWAITING_COMPLETION_APPROVAL", "COMPLETED"].includes(task.plan.status)) {
       throw conflict("Tasks are locked after all work is complete and awaiting final HR sign-off.");
@@ -1054,54 +1051,8 @@ export class OnboardingOrchestrator {
     const isCompleting =
       updates.status === "COMPLETED" && currentTask.status !== "COMPLETED";
 
-    // Update in-memory task
-    if (memTask) {
-      Object.assign(memTask, {
-        ...(updates.status ? { status: updates.status } : {}),
-        ...(updates.reviewState ? { reviewState: updates.reviewState } : {}),
-        ...(updates.ownerRole ? { ownerRole: updates.ownerRole } : {}),
-        ...(updates.assigneeUserId !== undefined
-          ? { assigneeUserId: updates.assigneeUserId }
-          : {}),
-        ...(updates.description ? { description: updates.description } : {}),
-        ...(updates.dueDate ? { dueDate: new Date(updates.dueDate) } : {}),
-        ...(isCompleting
-          ? { completedAt: new Date(), completedById: actor.userId }
-          : {}),
-      });
-
-      if (isCompleting && memPlan) {
-        const allTasks = memPlan.tasks;
-        const statusMap: Map<string, string> = new Map(
-          allTasks.map((t: any) => [
-            t.id,
-            t.id === taskId ? "COMPLETED" : t.status,
-          ]),
-        );
-        const deps = allTasks.flatMap((t: any) =>
-          (t.dependencies ?? []).map((d: any) => ({
-            taskId: d.taskId,
-            dependsOnId: d.dependsOnId,
-          })),
-        );
-        const dependentTaskIds = deps
-          .filter((d: any) => d.dependsOnId === taskId)
-          .map((d: any) => d.taskId);
-        for (const depId of dependentTaskIds) {
-          if (isTaskReadyForDispatch(depId, deps, statusMap)) {
-            const depTask = allTasks.find((t: any) => t.id === depId);
-            if (depTask && depTask.status === "BLOCKED") {
-              depTask.status = "NOT_STARTED";
-            }
-          }
-        }
-      }
-    }
-
-    let updated = memTask || currentTask;
-
-    if (isDatabaseOnline()) {
-      try {
+    let updated = currentTask;
+    try {
         updated = await prisma.$transaction(async (tx) => {
           const result = await tx.planTask.update({
             where: { id: taskId },
@@ -1195,9 +1146,8 @@ export class OnboardingOrchestrator {
 
           return result;
         });
-      } catch {
-        setDatabaseOnline(false);
-      }
+    } catch (error) {
+      throw databaseUnavailableError(error);
     }
 
     return updated;

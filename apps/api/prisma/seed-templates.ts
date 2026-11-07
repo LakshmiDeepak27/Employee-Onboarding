@@ -5,7 +5,7 @@ dotenv.config({ path: "../../.env" });
 import { PrismaClient, type TaskType, type ServiceArea, type OwnerRole, type AuthorityClass, type DeadlineAnchor, type DeadlineBasis } from "@prisma/client";
 
 const prisma = new PrismaClient();
-const demo = "DEMO TEMPLATE — HR must review and replace or approve this workflow before using it for a real hire. This is operational guidance, not legal advice.";
+const starterNotice = "Starter workflow. HR should confirm company policy, eligibility and dates before applying it to a real hire.";
 const templates: Array<{
   taskType: TaskType; service: ServiceArea; title: string; owner: OwnerRole;
   authority: AuthorityClass; anchor: DeadlineAnchor; offset: number; basis: DeadlineBasis;
@@ -27,7 +27,7 @@ async function main() {
       taskType: item.taskType,
       service: item.service,
       title: item.title,
-      description: demo,
+      description: starterNotice,
       jurisdictionCode: null,
       employmentTypes: item.employmentTypes ?? [],
       roleFamilies: [],
@@ -43,7 +43,7 @@ async function main() {
     if (existing) await prisma.taskTemplate.update({ where: { id: existing.id }, data });
     else await prisma.taskTemplate.create({ data });
   }
-  console.log(`Seeded/updated ${templates.length} clearly marked demo onboarding templates.`);
+  console.log(`Seeded/updated ${templates.length} starter onboarding templates.`);
 }
 
 main().catch((error) => { console.error("Template seeding failed.", error); process.exitCode = 1; }).finally(async () => prisma.$disconnect());

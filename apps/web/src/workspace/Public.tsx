@@ -22,6 +22,7 @@ import {
 import { useSession, homeFor } from "./session";
 import { ClyoraLogo } from "./ClyoraLogo";
 import { ApiError, api } from "../lib/api";
+import { cleanDisplayDescription } from "./ui";
 
 const BrandMark = ClyoraLogo;
 
@@ -632,8 +633,10 @@ export function ForgotPassword() {
         demoNote?: string;
       };
       setApiMessage(
-        [data.message, data.demoNote].filter(Boolean).join(" ") ||
-          "The password recovery endpoint responded, but email delivery is not configured in this environment.",
+        cleanDisplayDescription(
+          [data.message, data.demoNote].filter(Boolean).join(" ") ||
+            "The password recovery endpoint responded, but email delivery is not configured in this environment.",
+        ),
       );
       setSubmitted(true);
     } catch {

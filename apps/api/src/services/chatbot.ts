@@ -86,22 +86,35 @@ export async function answerChat(
     return fallback('Please ask a specific HR or onboarding policy question.', 'unsupported');
   }
 
-  const clauses = (await prisma.policyClause.findMany({
-    where: {
-      OR: tokens.flatMap((token) => [
-        { body: { contains: token, mode: 'insensitive' as const } },
-        { heading: { contains: token, mode: 'insensitive' as const } },
-        { topics: { has: token } },
-      ]),
-    },
-    select: {
-      id: true,
-      heading: true,
-      body: true,
-      document: { select: { title: true, sourceUri: true } },
-    },
-    take: 5,
-  })) as RetrievedPolicyClause[];
+  let retrievalTimer: ReturnType<typeof setTimeout> | undefined;
+  let clauses: RetrievedPolicyClause[];
+  try {
+    clauses = (await Promise.race([
+      prisma.policyClause.findMany({
+        where: {
+          OR: tokens.flatMap((token) => [
+            { body: { contains: token, mode: 'insensitive' as const } },
+            { heading: { contains: token, mode: 'insensitive' as const } },
+            { topics: { has: token } },
+          ]),
+        },
+        select: {
+          id: true,
+          heading: true,
+          body: true,
+          document: { select: { title: true, sourceUri: true } },
+        },
+        take: 3,
+      }),
+      new Promise<never>((_, reject) => {
+        retrievalTimer = setTimeout(() => reject(new Error('Policy lookup timed out')), 2500);
+      }),
+    ])) as RetrievedPolicyClause[];
+  } catch {
+    return fallback('Policy lookup is taking longer than usual. Please try again in a moment.', 'provider_unavailable');
+  } finally {
+    if (retrievalTimer) clearTimeout(retrievalTimer);
+  }
 
   if (clauses.length === 0) {
     return fallback(
@@ -116,7 +129,7 @@ export async function answerChat(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), env.CHAT_PROVIDER_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), Math.min(env.CHAT_PROVIDER_TIMEOUT_MS, 3500));
   try {
     const response = await fetch(`${env.OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
@@ -148,7 +161,7 @@ export async function answerChat(
       }),
     });
 
-    if (!response.ok) return fallback('The configured assistant provider is unavailable.', 'provider_unavailable');
+    if (!response.ok) return sourceAnswer(clauses);
     const payload = (await response.json()) as { message?: { content?: string } };
     if (!payload.message?.content) return fallback('The assistant returned no usable answer.', 'invalid_output');
 
@@ -162,7 +175,7 @@ export async function answerChat(
     const parsed = parseProviderOutput(decoded, clauseIds);
     return parsed ?? fallback('The assistant returned an invalid or ungrounded answer.', 'invalid_output');
   } catch {
-    return fallback('The configured assistant provider is unavailable.', 'provider_unavailable');
+    return sourceAnswer(clauses);
   } finally {
     clearTimeout(timeout);
   }

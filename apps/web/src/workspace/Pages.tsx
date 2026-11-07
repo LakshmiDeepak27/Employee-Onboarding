@@ -35,6 +35,8 @@ import {
   Feedback,
   human,
   date,
+  cleanDisplayName,
+  cleanDisplayDescription,
 } from "./ui";
 
 export function Dashboard() {
@@ -1114,20 +1116,20 @@ export function TaskRows({
               {tasks.map((t) => (
                 <tr key={t.id}>
                   <td>
-                    <strong>{t.title}</strong>
+                    <strong>{cleanDisplayName(t.title)}</strong>
                     <small>
                       {human(t.service)} · {t.dependsOn.length} dependencies
                     </small>
                     {t.description && (
                       <details>
                         <summary>Details & policy sources</summary>
-                        <p>{t.description}</p>
+                        <p>{cleanDisplayDescription(t.description)}</p>
                         {t.citations.map((c) => (
                           <blockquote key={c.id}>
                             {c.quotedText}
                             <small>
                               {c.documentTitle} · {c.clauseId}
-                              {c.isMock ? " · Demo policy" : ""}
+                              {c.isMock ? " · Sample policy" : ""}
                             </small>
                           </blockquote>
                         ))}
@@ -1186,13 +1188,27 @@ export function TaskRows({
 }
 export function Tasks() {
   const [params, setParams] = useSearchParams();
+  const plans = useQuery({
+    queryKey: ["work-queue-plans"],
+    queryFn: () => api.plans.list({ pageSize: 100 }),
+  });
+  const activePlans = (plans.data?.items ?? []).filter(
+    (plan) => !["COMPLETED", "CANCELLED", "REFUSED"].includes(plan.status),
+  );
+  const people = [...new Map(activePlans.map((plan) => [plan.employeeId, plan.employeeName])).entries()];
+  const requestedEmployeeId = params.get("employeeId");
+  const selectedEmployeeId = requestedEmployeeId && people.some(([id]) => id === requestedEmployeeId)
+    ? requestedEmployeeId
+    : people[0]?.[0] ?? "";
   const q = useQuery({
-    queryKey: ["tasks", params.toString()],
+    queryKey: ["tasks", selectedEmployeeId, params.get("status")],
     queryFn: () =>
       api.tasks.list({
         pageSize: 100,
+        ...(selectedEmployeeId ? { employeeId: selectedEmployeeId } : {}),
         ...(params.get("status") ? { status: params.get("status")! } : {}),
       }),
+    enabled: !!selectedEmployeeId,
   });
   const search = (params.get("search") ?? "").toLowerCase();
   const items =
@@ -1200,11 +1216,25 @@ export function Tasks() {
   return (
     <>
       <Heading
-        title="Work that moves onboarding forward."
-        description="Review up to 100 tasks. Complete service-specific work in Documents, Training, Benefits or Manager tasks."
+        title="Work queue"
+        description="Follow one employee’s onboarding tasks from approval through completion."
       />
       <section className="panel">
         <div className="toolbar">
+          <label className="toolbar-select-label">
+            <span>Employee</span>
+            <select
+              aria-label="Filter work by employee"
+              value={selectedEmployeeId}
+              disabled={plans.isPending || !people.length}
+              onChange={(e) => setParams((current) => {
+                current.set("employeeId", e.target.value);
+                return current;
+              })}
+            >
+              {people.map(([id, name]) => <option value={id} key={id}>{name}</option>)}
+            </select>
+          </label>
           <label className="search-box">
             <Search size={16} />
             <input
@@ -1244,9 +1274,18 @@ export function Tasks() {
             ))}
           </select>
         </div>
-        <QueryState query={q}>
-          <TaskRows tasks={items} />
-        </QueryState>
+        {plans.isError ? (
+          <p className="notice danger">Unable to load active onboarding plans.</p>
+        ) : plans.isPending ? (
+          <div className="loading" role="status"><span className="spinner" />Loading active onboarding…</div>
+        ) : !selectedEmployeeId ? (
+          <Empty title="No active onboarding plans" text="Create an employee profile and generate a plan to see work here." />
+        ) : (
+          <>
+            <div className="toolbar"><span className="muted">{items.length} tasks shown for {people.find(([id]) => id === selectedEmployeeId)?.[1] ?? "this employee"}</span></div>
+            <QueryState query={q}><TaskRows tasks={items} /></QueryState>
+          </>
+        )}
       </section>
     </>
   );
@@ -1392,14 +1431,15 @@ export function PlanDetails() {
                       <article key={n.id}>
                         <span className="action-number">{n.depth + 1}</span>
                         <div>
-                          <strong>{n.title}</strong>
+                          <strong>{cleanDisplayName(n.title)}</strong>
                           <p>
                             {graph.data.edges
                               .filter((e) => e.to === n.id)
                               .map(
                                 (e) =>
-                                  graph.data!.nodes.find((v) => v.id === e.from)
-                                    ?.title,
+                                  cleanDisplayName(
+                                    graph.data!.nodes.find((v) => v.id === e.from)?.title,
+                                  ),
                               )
                               .join(" → ") || "No prerequisites"}
                           </p>

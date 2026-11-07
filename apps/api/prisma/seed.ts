@@ -164,13 +164,13 @@ async function seedCatalogs() {
       isAutoEnrol: false,
     },
     {
-      code: 'SG-DEMO-OPTIONS',
-      name: 'Singapore Benefits Options (Demo)',
+      code: 'SG-STARTER-OPTIONS',
+      name: 'Singapore Benefits Options',
       type: 'WELLNESS' as const,
       jurisdictionCode: 'SG',
       enrollmentWindowDays: 30,
       isAutoEnrol: false,
-      description: 'DEMO ONLY — replace with company-approved benefits and HR-verified enrollment terms before use.',
+      description: 'Starter options for presentation only. HR must confirm current company benefits and eligibility before use.',
     },
   ];
   for (const b of benefits) {
@@ -341,15 +341,31 @@ async function seedDemoUsers() {
     workMode: 'HYBRID',
   });
 
+  // One active peer makes the buddy assignment flow demonstrable for the seeded manager.
+  const buddy = await makeEmployee({
+    employeeNumber: 'EMP-0004',
+    firstName: 'Mira',
+    lastName: 'Shah',
+    personalEmail: 'mira@example.test',
+    jurisdictionCode: 'CA-ON',
+    employmentType: 'FULL_TIME',
+    startInDays: -180,
+    jobTitle: 'Software Engineer',
+    roleFamily: 'engineering',
+    workMode: 'HYBRID',
+    managerId: mgrEmp.id,
+  });
+  await prisma.employee.update({ where: { id: buddy.id }, data: { status: 'ACTIVE' } });
+
   await prisma.onboardingPlan.deleteMany({
     where: {
       employee: {
-        employeeNumber: { in: ['EMP-0004', 'EMP-0005'] },
+        employeeNumber: { in: ['EMP-0005'] },
       },
     },
   });
   await prisma.employee.deleteMany({
-    where: { employeeNumber: { in: ['EMP-0004', 'EMP-0005'] } },
+    where: { employeeNumber: { in: ['EMP-0005'] } },
   });
 }
 

@@ -443,8 +443,8 @@ export function generatePowerShellScripts(
 ): Record<string, string> {
   const upn =
     employee.workEmail ||
-    `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}@demo.io`;
-  const domain = upn.split("@")[1] || "demo.io";
+    `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}@clyora`;
+  const domain = upn.split("@")[1] || "clyora";
   const prefix = upn.split("@")[0];
   const now = new Date().toISOString();
 
@@ -646,7 +646,7 @@ Write-Host "De-provisioning script completed. Audit log entry recorded." -Foregr
 export function generateCommsBundle(employee: any, plan: any): CommsBundle {
   const upn =
     employee.workEmail ||
-    `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}@demo.io`;
+    `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}@clyora`;
 
   const emailSubject = `Welcome to the Team, ${employee.firstName}! Your Day-1 Onboarding Guide`;
 
@@ -678,7 +678,7 @@ export function generateCommsBundle(employee: any, plan: any): CommsBundle {
     <div class="content">
       <span class="badge">Start Date: ${employee.startDate}</span>
       <p>Dear ${employee.firstName},</p>
-      <p>Welcome to <strong>Demo Org</strong>! Your onboarding plan has been configured and approved. We have prepared your corporate systems, equipment, and access so your first day is smooth and welcoming.</p>
+      <p>Welcome to <strong>CLYORA</strong>! Your onboarding plan shows the current preparation status for your first day. Check your workspace for assigned actions and progress.</p>
 
       <div class="card">
         <h3>Your Account Information</h3>
@@ -708,7 +708,7 @@ export function generateCommsBundle(employee: any, plan: any): CommsBundle {
       <p>Warm regards,<br><strong>People & Culture Team</strong></p>
     </div>
     <div class="footer">
-      Demo Org Inc. · Employee Onboarding & Compliance Portal · Confidential
+      CLYORA · Employee Onboarding Portal · Confidential
     </div>
   </div>
 </body>
@@ -718,7 +718,7 @@ export function generateCommsBundle(employee: any, plan: any): CommsBundle {
 
 Dear ${employee.firstName},
 
-We are delighted to welcome you to Demo Org as our new ${employee.jobTitle} in ${employee.departmentName || "Engineering"}.
+We are delighted to welcome you to CLYORA as our new ${employee.jobTitle} in ${employee.departmentName || "Engineering"}.
 
 YOUR ACCOUNT DETAILS:
 - Work Email (UPN): ${upn}
@@ -772,10 +772,10 @@ People & Culture Team`;
 ## 3. Key Contacts
 | Name / Role | Email | Purpose |
 | :--- | :--- | :--- |
-| **Direct Manager** | manager@demo.io | First-day agenda, 1-on-1s, team priorities |
-| **IT Helpdesk** | it.support@demo.io | Hardware, password resets, system access |
-| **HR People Partner** | hr.admin@demo.io | Benefits, payroll, statutory documents |
-| **Team Buddy** | buddy@demo.io | Informal guidance, team introductions |
+| **Direct Manager** | See your onboarding workspace | First-day agenda, 1-on-1s, team priorities |
+| **IT Helpdesk** | Contact your organization IT team | Hardware and system access |
+| **HR People Partner** | Contact your organization HR team | Benefits, payroll and documents |
+| **Team Buddy** | See your onboarding workspace | Informal guidance and team introductions |
 
 ---
 
@@ -910,7 +910,7 @@ export function generateOnboardingPack(
       personalEmail: employee.personalEmail,
       workEmail:
         employee.workEmail ||
-        `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}@demo.io`,
+        `${employee.firstName.toLowerCase()}.${employee.lastName.toLowerCase()}@clyora`,
       jobTitle: employee.jobTitle,
       departmentName:
         employee.departmentName || employee.department?.name || "Engineering",
