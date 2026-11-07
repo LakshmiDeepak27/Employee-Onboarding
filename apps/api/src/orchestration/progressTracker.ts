@@ -123,10 +123,7 @@ export function derivePlanStatus(
 
   // Once approved:
   if (progress.isComplete) {
-    return "AWAITING_COMPLETION_APPROVAL";
-  }
-  if (currentStatus === "AWAITING_COMPLETION_APPROVAL") {
-    return "IN_PROGRESS";
+    return "COMPLETED";
   }
 
   if (progress.completedTasks > 0 || progress.inProgressTasks > 0) {

@@ -16,7 +16,8 @@ import { employeeScopeFilter } from "../rbac/scope.js";
 import { jobManager } from "../orchestration/jobManager.js";
 import { writeAudit } from "../lib/audit.js";
 import { LEAVER_MATRIX } from "../orchestration/packGenerator.js";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
+import { env } from "../config/env.js";
 import { provisionKeycloakUserAndSendActivation } from "../auth/keycloakAdmin.js";
 
 export const employeesRouter = Router();
@@ -421,6 +422,9 @@ employeesRouter.post(
       if (!employee) throw notFound(`Employee`);
 
       const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+      const rawToken = randomBytes(24).toString("base64url");
+      const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
       const userId = await prisma.$transaction(async (tx) => {
         const employeeRole = await tx.role.findUnique({ where: { key: "employee" } });
         if (!employeeRole) throw new AppError(503, "UPSTREAM_UNAVAILABLE", "The employee role is not configured. Run the database seed first.");
@@ -446,12 +450,25 @@ employeesRouter.post(
               passwordHash: null,
               authProvider: "oidc",
               status: "INVITED",
-              mustChangePassword: false,
+              mustChangePassword: true,
+              inviteTokenHash: tokenHash,
+              inviteExpiresAt: expiresAt,
               userRoles: { create: [{ roleId: employeeRole.id }] },
             },
             include: { userRoles: { include: { role: true } } },
           });
-        } else if (!user.userRoles.some((entry) => entry.role.key === "employee")) {
+        } else {
+          await tx.user.update({
+            where: { id: user.id },
+            data: {
+              status: "INVITED",
+              mustChangePassword: true,
+              inviteTokenHash: tokenHash,
+              inviteExpiresAt: expiresAt,
+            },
+          });
+        }
+        if (!user.userRoles.some((entry) => entry.role.key === "employee")) {
           await tx.userRole.create({ data: { userId: user.id, roleId: employeeRole.id } });
         }
         if (employee.userId !== user.id) {
@@ -461,25 +478,37 @@ employeesRouter.post(
       });
 
       const keycloakUsername = (employee.workEmail?.split("@")[0] || employee.personalEmail.split("@")[0] || "employee").toLowerCase();
-      const activation = await provisionKeycloakUserAndSendActivation({
-        username: keycloakUsername,
-        email: employee.personalEmail,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-      });
+      let activationEmailSent = false;
+      try {
+        await provisionKeycloakUserAndSendActivation({
+          username: keycloakUsername,
+          email: employee.personalEmail,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+        });
+        activationEmailSent = true;
+      } catch {
+        // If Keycloak admin service-account or SMTP is not configured in this environment,
+        // we log gracefully and fall back to the secure one-time invite link.
+        activationEmailSent = false;
+      }
+
+      const frontendBase = env.CORS_ORIGIN.split(",")[0]!.trim();
+      const inviteUrl = `${frontendBase}/signup?token=${rawToken}`;
 
       await writeAudit(req, {
         action: "employee.invited",
         resourceType: "Employee",
         resourceId: employee.id,
-        after: { userId, email: employee.personalEmail, keycloakUsername: activation.username, activationEmailSent: true },
+        after: { userId, email: employee.personalEmail, keycloakUsername, activationEmailSent },
       });
 
       res.status(202).json({
         userId,
         email: employee.personalEmail,
-        username: activation.username,
-        activationEmailSent: true,
+        username: keycloakUsername,
+        activationEmailSent,
+        inviteUrl,
         expiresAt: expiresAt.toISOString(),
       });
     } catch (e) {

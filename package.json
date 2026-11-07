@@ -27,7 +27,10 @@
     "openapi:check": "npm run openapi:check -w @eo/api",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:deploy": "npm run db:deploy -w @eo/api"
+    "db:deploy": "npm run db:deploy -w @eo/api",
+    "auth:up": "docker update --restart unless-stopped eo-keycloak && docker start eo-keycloak || docker compose --profile local-identity up -d keycloak",
+    "auth:stop": "docker stop eo-keycloak || docker compose --profile local-identity stop keycloak",
+    "auth:logs": "docker logs -f eo-keycloak"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

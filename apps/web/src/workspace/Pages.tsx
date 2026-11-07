@@ -805,13 +805,38 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
                       className="button primary"
                       disabled={invite.isPending}
                       onClick={() => invite.mutate()}
+                      style={{ alignSelf: "flex-start" }}
                     >
-                      {invite.isPending ? "Sending activation link…" : "Send employee activation link"}
+                      {invite.isPending ? "Generating activation link…" : "Send employee activation link"}
                     </button>
                     <Feedback
                       error={invite.error}
-                      success={invite.isSuccess ? `Activation email sent to ${invite.data.email}. The link expires in 7 days.` : undefined}
+                      success={
+                        invite.isSuccess
+                          ? invite.data.activationEmailSent
+                            ? `Activation email sent to ${invite.data.email}. The link expires in 7 days.`
+                            : `Employee account provisioned! Activation link ready.`
+                          : undefined
+                      }
                     />
+                    {invite.isSuccess && invite.data.inviteUrl && (
+                      <div className="active-plan-card" style={{ marginTop: "8px", wordBreak: "break-all" }}>
+                        <span className="field-label" style={{ fontSize: "12px", color: "var(--ink)" }}>
+                          One-time activation link:
+                        </span>
+                        <a
+                          href={invite.data.inviteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: "var(--primary)", fontSize: "13px", fontWeight: 600, textDecoration: "underline" }}
+                        >
+                          {invite.data.inviteUrl}
+                        </a>
+                        <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--muted)" }}>
+                          The employee can open this link to set their password, or sign in directly with Keycloak SSO once verified.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </Panel>
               )}
@@ -1082,7 +1107,7 @@ export function TaskRows({
                 <th>Owner</th>
                 <th>Due date</th>
                 <th>Status</th>
-                <th>Review</th>
+                <th>Next action</th>
               </tr>
             </thead>
             <tbody>
@@ -1136,8 +1161,16 @@ export function TaskRows({
                           ? "Reopen review"
                           : "Mark reviewed"}
                       </button>
-                    ) : (
+                    ) : t.status === "COMPLETED" || t.status === "SKIPPED" ? (
                       <Badge value={t.reviewState} />
+                    ) : workspaceFor(user!) === "manager" && t.service === "MANAGER" ? (
+                      <Link className="button secondary small" to="/manager/tasks">Open manager task</Link>
+                    ) : workspaceFor(user!) === "employee" && ["DOCUMENTS", "TRAINING", "BENEFITS"].includes(t.service) ? (
+                      <Link className="button secondary small" to={`/employee/${t.service.toLowerCase() === "documents" ? "documents" : t.service.toLowerCase()}`}>Continue task</Link>
+                    ) : workspaceFor(user!) === "hr" ? (
+                      <Link className="button secondary small" to={`/hr/${({ DOCUMENTS: "documents", EQUIPMENT: "equipment", PAYROLL: "payroll", BENEFITS: "benefits", TRAINING: "training", MANAGER: "manager-tasks" } as Record<string, string>)[t.service] ?? "tasks"}`}>Open owner queue</Link>
+                    ) : (
+                      <span className="muted">Owned by {human(t.ownerRole)}</span>
                     )}
                   </td>
                 </tr>
@@ -1293,12 +1326,22 @@ export function PlanDetails() {
                 Your onboarding is complete. HR has approved your final sign-off.
               </p>
             )}
+            {workspaceFor(user!) === "manager" && (
+              <p className="notice" role="status">
+                This is the full team journey. Your manager-owned actions and due dates are in <Link to="/manager/tasks">Manager tasks</Link>. IT-owned laptop and account work is handled by the IT queue; you can follow its status here.
+              </p>
+            )}
+            {workspaceFor(user!) === "employee" && (
+              <p className="notice" role="status">
+                This page shows your complete onboarding plan. Complete items assigned to you from My tasks, Documents, Training, and Benefits. Your manager and IT will update their own tasks.
+              </p>
+            )}
             <div className="tabs" role="tablist" aria-label="Plan sections">
               {[
                 "Tasks",
                 ...(can(user, "finding.read") ? ["Findings"] : []),
                 "Dependencies",
-                "IT pack",
+                ...(can(user, "plan.approve") ? ["IT pack"] : []),
               ].map((t) => (
                 <button
                   role="tab"

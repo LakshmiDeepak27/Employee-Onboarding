@@ -134,6 +134,7 @@ export const InviteEmployeeResponseSchema = z
     email: Email,
     username: z.string(),
     activationEmailSent: z.boolean(),
+    inviteUrl: z.string().optional(),
     expiresAt: IsoDateTime,
   })
   .openapi("InviteEmployeeResponse");

@@ -41,6 +41,15 @@ type ServiceRow = {
   catalogItem?: { name: string };
   serialNumber?: string;
   buddyName?: string;
+  buddyEmployeeId?: string | null;
+  agenda?: { time: string; title: string; owner?: string }[] | null;
+  employeeId?: string;
+  employeeName?: string;
+  planId?: string;
+  taskTitle?: string;
+  taskDescription?: string | null;
+  taskStatus?: string;
+  blockedBy?: string[];
 };
 type Service = "documents" | "training" | "benefits" | "manager" | "equipment";
 const configs: Record<
@@ -85,15 +94,24 @@ export function ServicePage({ service }: { service: Service }) {
   const cache = useQueryClient();
   const q = useQuery({ queryKey: ["service", service], queryFn: cfg.load });
   const [search, setSearch] = useState("");
+  const [managerError, setManagerError] = useState("");
+  const [managerDrafts, setManagerDrafts] = useState<Record<string, { buddyEmployeeId: string; agendaText: string; notes: string }>>({});
+  const team = useQuery({
+    queryKey: ["manager-buddy-options"],
+    queryFn: () => api.employees.list({ pageSize: 100, sort: "lastName" }),
+    enabled: service === "manager" && can(user, "employee.read"),
+  });
   const action = useMutation({
     mutationFn: async ({
       row,
       action,
       file,
+      managerInput,
     }: {
       row: ServiceRow;
       action: string;
       file?: File;
+      managerInput?: { buddyEmployeeId?: string; agenda?: { time: string; title: string }[]; notes?: string; markComplete: boolean };
     }) => {
       if (action === "upload" && file) {
         if (file.size > 5 * 1024 * 1024)
@@ -132,11 +150,7 @@ export function ServicePage({ service }: { service: Service }) {
       if (action === "verify")
         return api.documents.verify(row.id, { decision: "VERIFY" });
       if (action === "training") return api.training.complete(row.id, {});
-      if (action === "manager")
-        return api.managerTasks.upsert(row.taskId, {
-          markComplete: true,
-          notes: "Completed from manager workspace",
-        });
+      if (action === "manager") return api.managerTasks.upsert(row.taskId, managerInput ?? { markComplete: false });
       if (action === "ELECT" || action === "WAIVE")
         return api.benefits.elect(row.id, {
           decision: action,
@@ -152,6 +166,49 @@ export function ServicePage({ service }: { service: Service }) {
     },
     onSuccess: () => void cache.invalidateQueries(),
   });
+  const managerDraft = (row: ServiceRow) => managerDrafts[row.taskId] ?? {
+    buddyEmployeeId: row.buddyEmployeeId ?? "",
+    agendaText: (row.agenda ?? []).map((a) => `${a.time} | ${a.title}`).join("\n"),
+    notes: row.notes ?? "",
+  };
+  const submitManagerTask = (row: ServiceRow, markComplete: boolean) => {
+    const draft = managerDraft(row);
+    const needsAgenda = ["PREPARE_DAY_ONE_AGENDA", "SCHEDULE_INTRO_MEETINGS", "DAY_ONE_AGENDA", "INTRO_MEETINGS"].includes(row.kind ?? "");
+    const agenda: { time: string; title: string }[] = [];
+    if (needsAgenda) {
+      for (const line of draft.agendaText.split("\n").map((value) => value.trim()).filter(Boolean)) {
+        const match = line.match(/^(\d{2}:\d{2})\s*\|\s*(.+)$/);
+        if (!match) {
+          setManagerError("Enter each agenda item as HH:MM | Description.");
+          return;
+        }
+        agenda.push({ time: match[1]!, title: match[2]! });
+      }
+    }
+    setManagerError("");
+    if (markComplete && row.kind === "BUDDY_ASSIGNMENT" && !draft.buddyEmployeeId) {
+      setManagerError("Choose a buddy before completing this task.");
+      return;
+    }
+    if (markComplete && needsAgenda && !agenda.length) {
+      setManagerError("Add at least one agenda item before completing this task.");
+      return;
+    }
+    if (markComplete && ["ACCESS_APPROVAL", "PROBATION_GOALS"].includes(row.kind ?? "") && !draft.notes.trim()) {
+      setManagerError("Add completion notes before completing this task.");
+      return;
+    }
+    action.mutate({
+      row,
+      action: "manager",
+      managerInput: {
+        markComplete,
+        ...(row.kind === "BUDDY_ASSIGNMENT" && draft.buddyEmployeeId ? { buddyEmployeeId: draft.buddyEmployeeId } : {}),
+        ...(needsAgenda ? { agenda } : {}),
+        ...(draft.notes.trim() ? { notes: draft.notes.trim() } : {}),
+      },
+    });
+  };
   const rows =
     q.data?.items.filter((r) =>
       JSON.stringify([
@@ -159,6 +216,8 @@ export function ServicePage({ service }: { service: Service }) {
         r.course?.title,
         r.benefitPlan?.name,
         r.kind,
+        r.taskTitle,
+        r.employeeName,
         r.catalogItem?.name,
       ])
         .toLowerCase()
@@ -170,9 +229,16 @@ export function ServicePage({ service }: { service: Service }) {
       <Feedback
         error={action.error}
         success={
-          action.isSuccess ? "Action completed successfully." : undefined
+          action.isSuccess
+            ? service === "manager"
+              ? action.variables?.managerInput?.markComplete
+                ? "Manager task completed. The plan and prerequisites have been updated."
+                : "Manager task details saved."
+              : "Action completed successfully."
+            : undefined
         }
       />
+      {managerError && service === "manager" && <p className="notice warning" role="alert">{managerError}</p>}
       <section className="panel">
         <div className="toolbar">
           <label className="search-box">
@@ -200,14 +266,14 @@ export function ServicePage({ service }: { service: Service }) {
                   </span>
                   <div className="service-content">
                     <h3>
-                      {row.course?.title ??
+                      {row.taskTitle ?? row.course?.title ??
                         row.benefitPlan?.name ??
                         row.catalogItem?.name ??
                         row.catalog?.name ??
                         human(row.documentType ?? row.kind)}
                     </h3>
                     <p>
-                      {row.course?.description ??
+                      {row.employeeName ? `For ${row.employeeName}. ` : ""}{row.taskDescription ?? row.course?.description ??
                         row.benefitPlan?.description ??
                         row.notes ??
                         (row.document?.fileName ||
@@ -222,6 +288,39 @@ export function ServicePage({ service }: { service: Service }) {
                             ? `Buddy: ${row.buddyName}`
                             : ""}
                     </small>
+                    {service === "manager" && row.planId && (
+                      <Link to={`/manager/onboarding/${row.planId}`}>View full onboarding plan</Link>
+                    )}
+                    {service === "manager" && (
+                      <>
+                        {row.kind === "BUDDY_ASSIGNMENT" && (
+                          <label className="form-field" style={{ marginTop: 12 }}>
+                            <span className="field-label">Onboarding buddy</span>
+                            <select aria-label={`Onboarding buddy for ${row.employeeName ?? "employee"}`} value={managerDraft(row).buddyEmployeeId} disabled={!!row.completedAt || action.isPending || team.isLoading || team.isError} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), buddyEmployeeId: e.target.value } }))}>
+                              {team.isLoading && <option value="">Loading team…</option>}
+                              <option value="">Choose a team member</option>
+                              {(team.data?.items ?? []).filter((person) => person.id !== row.employeeId && person.id !== user?.employeeId && person.status === "ACTIVE").map((person) => <option value={person.id} key={person.id}>{person.firstName} {person.lastName}</option>)}
+                            </select>
+                            {team.isError && <small className="field-hint">Could not load team members. Refresh this page and try again.</small>}
+                            {team.isSuccess && !team.data.items.some((person) => person.id !== row.employeeId && person.id !== user?.employeeId && person.status === "ACTIVE") && <small className="field-hint">No active teammates are available for buddy assignment.</small>}
+                          </label>
+                        )}
+                        {["DAY_ONE_AGENDA", "INTRO_MEETINGS"].includes(row.kind ?? "") && (
+                          <label className="form-field" style={{ marginTop: 12 }}>
+                            <span className="field-label">Agenda items</span>
+                            <textarea rows={3} placeholder={"09:00 | Welcome and introductions\n10:00 | Team setup"} value={managerDraft(row).agendaText} disabled={!!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), agendaText: e.target.value } }))} />
+                            <small className="field-hint">One item per line, formatted as HH:MM | Description.</small>
+                          </label>
+                        )}
+                        {["ACCESS_APPROVAL", "PROBATION_GOALS"].includes(row.kind ?? "") && (
+                          <label className="form-field" style={{ marginTop: 12 }}>
+                            <span className="field-label">Completion notes</span>
+                            <textarea rows={3} value={managerDraft(row).notes} disabled={!!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), notes: e.target.value } }))} placeholder="Record the access review or agreed goals." />
+                          </label>
+                        )}
+                        {!!row.blockedBy?.length && <p className="notice warning">Waiting for: {row.blockedBy.join(", ")}</p>}
+                      </>
+                    )}
                     {row.rejectionReason && (
                       <p className="notice warning">{row.rejectionReason}</p>
                     )}
@@ -229,7 +328,7 @@ export function ServicePage({ service }: { service: Service }) {
                   <div className="service-actions">
                     <Badge
                       value={
-                        row.status ??
+                        row.taskStatus ?? row.status ??
                         (row.completedAt ? "COMPLETED" : "NOT_STARTED")
                       }
                     />
@@ -301,16 +400,15 @@ export function ServicePage({ service }: { service: Service }) {
                       )}
                     {service === "manager" &&
                       can(user, "managertask.write") &&
-                      !row.completedAt && (
-                        <button
-                          className="button secondary small"
-                          disabled={action.isPending}
-                          onClick={() =>
-                            action.mutate({ row, action: "manager" })
-                          }
-                        >
-                          {action.isPending && action.variables?.row.id === row.id ? "Saving…" : "Mark completed"}
-                        </button>
+                      !row.completedAt && row.taskStatus !== "COMPLETED" && row.taskStatus !== "SKIPPED" && (
+                        <div className="form-vertical" style={{ gap: 8 }}>
+                          <button className="button secondary small" disabled={action.isPending || !!row.blockedBy?.length} onClick={() => submitManagerTask(row, false)}>
+                            {action.isPending && action.variables?.row.id === row.id ? "Saving…" : "Save details"}
+                          </button>
+                          <button className="button primary small" disabled={action.isPending || !!row.blockedBy?.length} onClick={() => submitManagerTask(row, true)}>
+                            {action.isPending && action.variables?.row.id === row.id ? "Completing…" : "Save & complete"}
+                          </button>
+                        </div>
                       )}
                     {service === "benefits" &&
                       can(user, "benefit.enrol") &&

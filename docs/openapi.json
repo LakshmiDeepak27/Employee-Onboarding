@@ -948,6 +948,9 @@
           "activationEmailSent": {
             "type": "boolean"
           },
+          "inviteUrl": {
+            "type": "string"
+          },
           "expiresAt": {
             "type": "string",
             "format": "date-time",
@@ -3292,6 +3295,46 @@
             ],
             "format": "date-time",
             "example": "2026-11-06T09:30:00.000Z"
+          },
+          "employeeId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "employeeName": {
+            "type": "string"
+          },
+          "planId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3f1a7c2e-9b4d-4f08-8d21-6b5e2a1c9d44"
+          },
+          "planStatus": {
+            "type": "string"
+          },
+          "taskTitle": {
+            "type": "string"
+          },
+          "taskDescription": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "taskStatus": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "example": "2026-12-01"
+          },
+          "blockedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [

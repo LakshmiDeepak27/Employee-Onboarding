@@ -76,15 +76,18 @@ HR, manager and employee workspaces share consistent navigation. The employee as
 
 ## Local Keycloak Setup Guide
 
-### 1. Launch Keycloak Container
-Run Keycloak locally in development mode:
-```sh
-docker run -d --name keycloak-dev -p 8080:8080 \
-  -e KEYCLOAK_ADMIN=admin \
-  -e KEYCLOAK_ADMIN_PASSWORD=admin \
-  quay.io/keycloak/keycloak:24.0.0 start-dev
+### 1. Start local Keycloak
+Copy `.env.example` to `.env`, set a local-only `KEYCLOAK_DEV_ADMIN_PASSWORD`, then run:
+
+```powershell
+npm run auth:up
 ```
-Access the Keycloak Admin Console at http://localhost:8080/admin (login: `admin` / `admin`).
+
+Open http://localhost:8080/admin and sign in with `KEYCLOAK_DEV_ADMIN_USERNAME` and `KEYCLOAK_DEV_ADMIN_PASSWORD` from `.env`. `npm run auth:up` starts an existing container named `eo-keycloak` if you already created one with `docker run`; otherwise it creates the local Compose service. New Compose-managed Keycloak data is stored in the named `keycloak_data` volume. Start it again later with `npm run auth:up`; `npm run auth:stop` stops it and `npm run auth:logs` shows its logs. Do not run `docker compose down -v` if you want to keep local Keycloak configuration and application documents.
+
+The local Keycloak service is behind the `local-identity` Compose profile and is not started by the normal production `docker compose up --build -d` command. `start-dev` is local testing only. For deployment, use a separately configured Keycloak production deployment or managed identity provider with HTTPS, a persistent production database, secure secrets, hostname/proxy settings, MFA policy, and SMTP. This Compose convenience does not create a production identity deployment.
+
+If the existing standalone container is named `eo-keycloak`, `npm run auth:up` reuses it, preserving your current realm and clients. Do not start a second Keycloak container at the same time because both need port 8080.
 
 ### 2. Create the Realm
 1. In the top-left dropdown, click **Create Realm**.

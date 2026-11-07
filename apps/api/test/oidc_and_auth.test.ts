@@ -1,3 +1,4 @@
+import "../src/config/env.js";
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
@@ -221,6 +222,12 @@ describe("Keycloak OIDC Authentication & Security Controls", () => {
 
       expect(hrUser).toBeDefined();
       if (hrUser) {
+        if (hrUser.oidcSubject) {
+          await prisma.user.update({
+            where: { id: hrUser.id },
+            data: { oidcSubject: null },
+          });
+        }
         const testSub = `keycloak-hr-uuid-${Date.now()}`;
         const session = await authService.loginWithOidc(
           testSub,

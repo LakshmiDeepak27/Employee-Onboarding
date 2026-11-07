@@ -222,6 +222,7 @@ export const api = {
         email: string;
         username: string;
         activationEmailSent: boolean;
+        inviteUrl?: string;
         expiresAt: string;
       }>(`/employees/${id}/invite`, {
         method: "POST",

@@ -40,6 +40,13 @@ const resourceModels = {
   "benefits/enrollments": "benefitEnrollment",
   "training/assignments": "trainingAssignment",
 } as const;
+const managerKindByTaskType: Record<string, string> = {
+  ASSIGN_BUDDY: "BUDDY_ASSIGNMENT",
+  PREPARE_DAY_ONE_AGENDA: "DAY_ONE_AGENDA",
+  SCHEDULE_INTRO_MEETINGS: "INTRO_MEETINGS",
+  APPROVE_SYSTEM_ACCESS: "ACCESS_APPROVAL",
+  SET_PROBATION_GOALS: "PROBATION_GOALS",
+};
 workflowRouter.use(async (req, _res, next) => {
   try {
     const actor = requireAuth(req);
@@ -75,13 +82,24 @@ workflowRouter.use(async (req, _res, next) => {
               : req.path.includes("manager")
                 ? "managertask"
                 : "document";
-      const scope = actor.permissions.get(prefix + ".read");
+      const scope =
+        (req.method === "GET" ? undefined : actor.permissions.get(prefix + ".write")) ??
+        actor.permissions.get(prefix + ".read");
       if (
         !scope ||
         !employeeId ||
         !(await isEmployeeInScope(actor, scope, employeeId))
       )
         throw notFound();
+      // Service routes are separate authorization boundaries. A manager must
+      // never update a plan task owned by IT, payroll, benefits, etc.
+      if (taskId && prefix === "managertask") {
+        const task = await prisma.planTask.findUnique({
+          where: { id: taskId },
+          select: { service: true },
+        });
+        if (!task || task.service !== "MANAGER") throw notFound();
+      }
       if (req.method !== "GET" && taskId) {
         const task = await prisma.planTask.findUnique({
           where: { id: taskId },
@@ -1051,21 +1069,26 @@ workflowRouter.get(
       let totalItems = 0;
       if (isDatabaseOnline()) {
         try {
+          const planScope = await scopedServiceWhere(req, "managertask.read");
+          const taskWhere = {
+            service: "MANAGER" as const,
+            plan: { ...((planScope as any).task?.plan ?? {}), status: { in: ["APPROVED", "IN_PROGRESS"] } },
+          };
           const [dbItems, count] = await Promise.all([
-            prisma.managerTask.findMany({
-              where: await scopedServiceWhere(req, "managertask.read"),
+            prisma.planTask.findMany({
+              where: taskWhere,
               include: {
-                buddyEmployee: { select: { firstName: true, lastName: true } },
+                managerTask: { include: { buddyEmployee: { select: { firstName: true, lastName: true } } } },
+                plan: { include: { employee: { select: { id: true, firstName: true, lastName: true } } } },
+                dependencies: { include: { dependsOn: { select: { id: true, title: true, status: true } } } },
               },
-              orderBy: { createdAt: "desc" },
+              orderBy: [{ dueDate: "asc" }, { sortOrder: "asc" }],
               skip: (q.page - 1) * q.pageSize,
               take: q.pageSize,
             }),
-            prisma.managerTask.count({
-              where: await scopedServiceWhere(req, "managertask.read"),
-            }),
+            prisma.planTask.count({ where: taskWhere }),
           ]);
-          items = dbItems;
+        items = dbItems;
           totalItems = count;
         } catch {
           setDatabaseOnline(false);
@@ -1076,16 +1099,27 @@ workflowRouter.get(
 
       res.json({
         items: items.map((m) => ({
-          id: m.id,
-          taskId: m.taskId,
-          kind: m.kind,
-          buddyEmployeeId: m.buddyEmployeeId,
-          buddyName: m.buddyEmployee
-            ? `${m.buddyEmployee.firstName} ${m.buddyEmployee.lastName}`
+          id: m.managerTask?.id ?? m.id,
+          taskId: m.id,
+          kind: managerKindByTaskType[m.taskType] ?? m.managerTask?.kind ?? "DAY_ONE_AGENDA",
+          buddyEmployeeId: m.managerTask?.buddyEmployeeId ?? null,
+          buddyName: m.managerTask?.buddyEmployee
+            ? `${m.managerTask.buddyEmployee.firstName} ${m.managerTask.buddyEmployee.lastName}`
             : null,
-          agenda: m.agenda as any,
-          notes: m.notes,
-          completedAt: m.completedAt?.toISOString() ?? null,
+          agenda: (m.managerTask?.agenda as any) ?? null,
+          notes: m.managerTask?.notes ?? null,
+          completedAt: m.managerTask?.completedAt?.toISOString() ?? null,
+          employeeId: m.plan.employeeId,
+          employeeName: `${m.plan.employee.firstName} ${m.plan.employee.lastName}`,
+          planId: m.planId,
+          planStatus: m.plan.status,
+          taskTitle: m.title,
+          taskDescription: m.description,
+          taskStatus: m.status,
+          dueDate: m.dueDate.toISOString().slice(0, 10),
+          blockedBy: m.dependencies
+            .filter((d: any) => !["COMPLETED", "SKIPPED"].includes(d.dependsOn.status))
+            .map((d: any) => d.dependsOn.title),
         })),
         meta: {
           page: q.page,
@@ -1146,15 +1180,46 @@ workflowRouter.put(
         where: { id: req.params.taskId },
         include: { plan: true },
       });
-      if (!task) throw notFound("Task");
+      if (!task || task.service !== "MANAGER") throw notFound("Manager task");
 
       const isComplete = b.markComplete ?? false;
+      const existing = await prisma.managerTask.findUnique({ where: { taskId: task.id } });
+      const effectiveBuddy = b.buddyEmployeeId ?? existing?.buddyEmployeeId;
+      if (effectiveBuddy) {
+        const [newHire, buddy] = await Promise.all([
+          prisma.employee.findUnique({ where: { id: task.plan.employeeId }, select: { id: true, departmentId: true } }),
+          prisma.employee.findUnique({ where: { id: effectiveBuddy }, select: { id: true, managerId: true, departmentId: true, status: true } }),
+        ]);
+        if (!newHire || !buddy || buddy.id === newHire.id || buddy.status !== "ACTIVE" || buddy.departmentId !== newHire.departmentId)
+          throw badRequest("Choose an active team member from the new hire’s department.");
+        if (actor.roles.includes("manager") && !actor.roles.includes("hr_admin") && buddy.managerId !== actor.employeeId)
+          throw badRequest("Choose a peer from your own team as the onboarding buddy.");
+      }
+      const effectiveAgenda = b.agenda ?? (existing?.agenda as any[] | null) ?? [];
+      const effectiveNotes = b.notes ?? existing?.notes ?? "";
+      if (isComplete) {
+        if (task.taskType === "ASSIGN_BUDDY" && !effectiveBuddy)
+          throw badRequest("Choose an onboarding buddy before completing this task.");
+        if (["PREPARE_DAY_ONE_AGENDA", "SCHEDULE_INTRO_MEETINGS"].includes(task.taskType) && !effectiveAgenda.length)
+          throw badRequest("Add at least one agenda item before completing this task.");
+        if (["APPROVE_SYSTEM_ACCESS", "SET_PROBATION_GOALS"].includes(task.taskType) && !effectiveNotes.trim())
+          throw badRequest("Add completion notes before completing this task.");
+      }
+
+      if (isComplete) {
+        await orchestrator.updateTask(
+          task.planId,
+          task.id,
+          { status: "COMPLETED" },
+          { userId: actor.userId, role: actor.roles.join(",") },
+        );
+      }
 
       const updated = await prisma.managerTask.upsert({
         where: { taskId: req.params.taskId! },
         create: {
           taskId: req.params.taskId!,
-          kind: "DAY_ONE_AGENDA",
+          kind: (managerKindByTaskType[task.taskType] ?? "DAY_ONE_AGENDA") as any,
           buddyEmployeeId: b.buddyEmployeeId ?? null,
           agenda: b.agenda as any,
           notes: b.notes ?? null,
@@ -1172,15 +1237,6 @@ workflowRouter.put(
           buddyEmployee: { select: { firstName: true, lastName: true } },
         },
       });
-
-      if (isComplete) {
-        await orchestrator.updateTask(
-          task.planId,
-          task.id,
-          { status: "COMPLETED" },
-          { userId: actor.userId, role: actor.roles.join(",") },
-        );
-      }
 
       await writeAudit(req, {
         action: "managertask.updated",

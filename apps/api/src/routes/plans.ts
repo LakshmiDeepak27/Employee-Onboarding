@@ -323,7 +323,7 @@ plansRouter.get(
 // GET /api/v1/plans/:id/pack (IT & HR Onboarding Pack Artifacts)
 plansRouter.get(
   "/:id/pack",
-  requirePermission("plan.read", {
+  requirePermission("plan.approve", {
     target: (req) => employeeIdForPlan(req.params.id!),
   }),
   async (req, res, next) => {
@@ -370,7 +370,7 @@ plansRouter.get(
 // GET /api/v1/plans/:id/pack/zip (Downloadable ZIP Archive)
 plansRouter.get(
   "/:id/pack/zip",
-  requirePermission("plan.read", {
+  requirePermission("plan.approve", {
     target: (req) => employeeIdForPlan(req.params.id!),
   }),
   async (req, res, next) => {
@@ -551,6 +551,13 @@ plansRouter.patch(
         where: { id: req.params.taskId },
       });
       if (!target || target.planId !== req.params.id) throw notFound("Task");
+      if (
+        actor.roles.includes("manager") &&
+        !actor.roles.includes("hr_admin") &&
+        target.service !== "MANAGER"
+      ) {
+        throw forbidden("Managers may update only manager-owned onboarding tasks.");
+      }
       if (b.reviewState && !actor.permissions.has("plan.approve"))
         throw forbidden("Only plan reviewers may change review decisions.");
       if (b.status === "COMPLETED" || b.status === "SKIPPED")

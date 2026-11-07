@@ -795,18 +795,24 @@ export class OnboardingOrchestrator {
         break;
       }
 
-      case "MANAGER":
+      case "MANAGER": {
+        const managerKind: Record<string, string> = {
+          ASSIGN_BUDDY: "BUDDY_ASSIGNMENT",
+          PREPARE_DAY_ONE_AGENDA: "DAY_ONE_AGENDA",
+          SCHEDULE_INTRO_MEETINGS: "INTRO_MEETINGS",
+          APPROVE_SYSTEM_ACCESS: "ACCESS_APPROVAL",
+          SET_PROBATION_GOALS: "PROBATION_GOALS",
+        };
         await tx.managerTask.upsert({
           where: { taskId: task.id },
           create: {
             taskId: task.id,
-            kind: (task.taskType === "ASSIGN_BUDDY"
-              ? "BUDDY_ASSIGNMENT"
-              : "DAY_ONE_AGENDA") as any,
+            kind: (managerKind[task.taskType] ?? "DAY_ONE_AGENDA") as any,
           },
           update: {},
         });
         break;
+      }
     }
   }
 

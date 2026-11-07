@@ -278,6 +278,15 @@ export const ManagerTaskSchema = z
       .nullable(),
     notes: z.string().nullable(),
     completedAt: IsoDateTime.nullable(),
+    employeeId: Uuid.optional(),
+    employeeName: z.string().optional(),
+    planId: Uuid.optional(),
+    planStatus: z.string().optional(),
+    taskTitle: z.string().optional(),
+    taskDescription: z.string().nullable().optional(),
+    taskStatus: z.string().optional(),
+    dueDate: IsoDate.optional(),
+    blockedBy: z.array(z.string()).optional(),
   })
   .openapi("ManagerTask");
 
