@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from "react";
-import { Sparkles, X, Minus, Send, Bot } from "lucide-react";
-import { api, type ApiError } from "../lib/api";
+import { X, Minus, Send } from "lucide-react";
+import { api } from "../lib/api";
 import type { ChatResponse } from "@eo/contracts";
 
 interface ChatMessage {
