@@ -14,8 +14,8 @@ CLYORA coordinates employee onboarding across HR, managers, IT, finance, and emp
 | Loom presentation | [Loom Recording](https://www.loom.com/share/57e37b5edbe94a6688d5ce0363482b9b) |
 | Presentation slides | [CLYORA Presentation Slides (PPTX)](output/presentations/CLYORA_Employee_Onboarding_Presentation.pptx) |
 | Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
-| API reference (live) | [https://employee-onboarding-du20.onrender.com/docs](https://employee-onboarding-du20.onrender.com/docs) |
-| API reference (local) | `http://localhost:4000/docs` after starting the API |
+| DOCS | [https://employee-onboarding-du20.onrender.com/docs](https://employee-onboarding-du20.onrender.com/docs) |
+| API reference (live) |[https://employee-onboarding-du20.onrender.com/](https://employee-onboarding-du20.onrender.com/)|
 
 ## Presentation
 
