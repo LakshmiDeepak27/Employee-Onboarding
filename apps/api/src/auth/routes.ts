@@ -75,7 +75,7 @@ authRouter.get("/oidc/start", async (req, res, next) => {
         if (firstOrigin && (firstOrigin.startsWith("http://") || firstOrigin.startsWith("https://"))) {
           target = `${firstOrigin}/login`;
         }
-        return res.redirect(`${target}?error=${encodeURIComponent("Keycloak SSO is running on your local machine (localhost:8080), which the cloud Render server cannot reach. Please use the One-Click Demo Sign-in buttons above.")}`);
+        return res.redirect(`${target}?error=${encodeURIComponent("Keycloak SSO is not configured on Render. Render cloud cannot reach localhost:8080. To use Keycloak on Render, provide a public Keycloak URL in Render's OIDC_ISSUER_URL environment variable, or use One-Click Demo Sign-in.")}`);
       }
       throw unauthenticated("Organization SSO is not configured");
     }

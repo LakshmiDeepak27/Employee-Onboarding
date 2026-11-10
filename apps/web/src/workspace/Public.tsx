@@ -385,10 +385,6 @@ export function Login() {
     navigate(homeFor(user), { replace: true });
   }, [loading, user, navigate]);
 
-  const isCloudDeployment =
-    typeof window !== "undefined" &&
-    !["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
-
   async function handleDemoLogin(email: string) {
     try {
       setLoggingInAs(email);
@@ -399,17 +395,6 @@ export function Login() {
     } finally {
       setLoggingInAs(null);
     }
-  }
-
-  function handleSsoStart() {
-    if (isCloudDeployment) {
-      setLoginError(
-        "Keycloak is running on your local machine (localhost:8080), which the cloud Render server cannot connect to. Please click 'Sign In as Asha Rao (HR)' or 'Sign In as David Chen (Manager)' above to explore the live cloud demo!",
-      );
-      return;
-    }
-    setStartingSso(true);
-    api.auth.oidcStart();
   }
 
   const activeError = loginError || displaySsoError || sessionError;
@@ -493,7 +478,10 @@ export function Login() {
               <button
                 className="auth-submit-btn"
                 type="button"
-                onClick={handleSsoStart}
+                onClick={() => {
+                  setStartingSso(true);
+                  api.auth.oidcStart();
+                }}
                 disabled={loading || startingSso || signingOut || !!loggingInAs}
                 aria-busy={startingSso}
               >
@@ -502,16 +490,10 @@ export function Login() {
                 ) : (
                   <ShieldCheck size={18} />
                 )}
-                {startingSso
-                  ? "Connecting to Keycloak…"
-                  : isCloudDeployment
-                    ? "Organization SSO (Local Keycloak Only)"
-                    : "Continue with Organization SSO (Keycloak)"}
+                {startingSso ? "Connecting to Keycloak…" : "Continue with Organization SSO (Keycloak)"}
               </button>
               <p className="auth-sso-note" role="note">
-                {isCloudDeployment
-                  ? "Keycloak runs on your machine at localhost:8080. On this cloud deployment, please use the One-Click Sign In buttons above."
-                  : "Enterprise OpenID Connect (requires self-hosted or cloud Keycloak)."}
+                Enterprise OpenID Connect (requires Keycloak OIDC configuration).
               </p>
               <div className="auth-switch-prompt">
                 New employee? Ask HR for an invitation link.
