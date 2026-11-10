@@ -67,7 +67,7 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, env.BCRYPT_ROUNDS);
 }
 
-async function buildSession(
+export async function buildSession(
   userId: string,
   meta: RequestMeta,
   familyId?: string,

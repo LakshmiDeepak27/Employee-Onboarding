@@ -15,6 +15,7 @@ const Context = createContext<{
   signingOut: boolean;
   error: string;
   acceptInvite: (token: string, password: string) => Promise<AuthUser>;
+  demoLogin: (email: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
 }>(null!);
 export function SessionProvider({ children }: { children: ReactNode }) {
@@ -55,6 +56,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         error,
         acceptInvite: async (token, password) => {
           const result = await api.auth.acceptInvite(token, password);
+          cache.clear();
+          setAccessToken(result.accessToken);
+          setUser(result.user);
+          return result.user;
+        },
+        demoLogin: async (email: string) => {
+          const result = await api.auth.demoLogin(email);
           cache.clear();
           setAccessToken(result.accessToken);
           setUser(result.user);

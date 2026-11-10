@@ -2,16 +2,19 @@
 
 CLYORA coordinates employee onboarding across HR, managers, IT, finance, and employees. HR creates an employee profile, reviews and approves an onboarding plan, and tracks work through final sign-off. Each team gets a role-scoped workspace for the tasks it owns.
 
+> **Live deployment:** 🚀 **[https://employee-onboarding-du20.onrender.com](https://employee-onboarding-du20.onrender.com)**  
 > **Project demonstration:** 📺 **[Watch the full CLYORA platform demonstration video on YouTube](https://youtu.be/sUSnpZo5RgE)**
 
 ## Project links
 
 | Resource | Link |
 | --- | --- |
+| Live deployment | [https://employee-onboarding-du20.onrender.com](https://employee-onboarding-du20.onrender.com) |
 | Video demonstration | [YouTube Video (https://youtu.be/sUSnpZo5RgE)](https://youtu.be/sUSnpZo5RgE) |
 | Loom presentation | [Loom Recording](https://www.loom.com/share/57e37b5edbe94a6688d5ce0363482b9b) |
 | Presentation slides | [CLYORA Presentation Slides (PPTX)](output/presentations/CLYORA_Employee_Onboarding_Presentation.pptx) |
 | Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
+| API reference (live) | [https://employee-onboarding-du20.onrender.com/docs](https://employee-onboarding-du20.onrender.com/docs) |
 | API reference (local) | `http://localhost:4000/docs` after starting the API |
 
 ## Presentation
@@ -197,7 +200,16 @@ The example configuration uses `LLM_PROVIDER=disabled`, so the baseline plan wor
 
 ## Deployment
 
-No public deployment is currently documented or verified. Before deploying, configure HTTPS, production-strength secrets, a reachable PostgreSQL database, persistent document storage, trusted CORS origins, and a production-ready identity provider/Keycloak deployment. Do not use Keycloak `start-dev` or the local Compose credentials in production. Review [the Docker configuration](docker-compose.yml) and [environment example](.env.example) against your hosting platform before release.
+The application is deployed on Render:
+- **Live web application:** [https://employee-onboarding-du20.onrender.com](https://employee-onboarding-du20.onrender.com)
+- **API Documentation & Swagger UI:** [https://employee-onboarding-du20.onrender.com/docs](https://employee-onboarding-du20.onrender.com/docs)
+- **Health Check Endpoint:** [https://employee-onboarding-du20.onrender.com/healthz](https://employee-onboarding-du20.onrender.com/healthz)
+
+### Evaluation Access
+The cloud deployment includes one-click role sign-in on the login page:
+- **HR Administrator:** Asha Rao (`asha.hr@clyora`) — full access, plan review, approvals, directory, payroll verification.
+- **Engineering Manager:** David Chen (`david.manager@clyora`) — team view, direct reports, buddy assignment, Day 1 tasks.
+- **Enterprise SSO:** Optional Keycloak OpenID Connect authentication can be enabled by configuring OIDC environment variables.
 
 ## Contributing
 

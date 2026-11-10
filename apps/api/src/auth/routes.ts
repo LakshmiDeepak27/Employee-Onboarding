@@ -10,7 +10,8 @@ import {
 import { validate } from "../middleware/validate.js";
 import { authenticate, requireAuth } from "../middleware/authenticate.js";
 import { requirePermission } from "../middleware/authorize.js";
-import { unauthenticated } from "../lib/errors.js";
+import { unauthenticated, badRequest } from "../lib/errors.js";
+import { prisma } from "../db/client.js";
 import { authRateLimit } from "../middleware/rateLimit.js";
 import { env, isProd } from "../config/env.js";
 import * as auth from "./service.js";
@@ -64,9 +65,16 @@ async function oidcDiscovery() {
   };
 }
 
-authRouter.get("/oidc/start", async (_req, res, next) => {
+authRouter.get("/oidc/start", async (req, res, next) => {
   try {
-    if (!oidcConfigured()) throw unauthenticated("Organization SSO is not configured");
+    if (!oidcConfigured()) {
+      const acceptsHtml = req.accepts(["html", "json"]) === "html" || !req.headers.accept || req.headers.accept.includes("text/html");
+      if (acceptsHtml) {
+        const frontend = env.CORS_ORIGIN.split(",")[0]!.trim();
+        return res.redirect(`${frontend}/login?error=${encodeURIComponent("Organization SSO (Keycloak) is not configured on this cloud deployment. Please use the Quick Demo Sign-in buttons below.")}`);
+      }
+      throw unauthenticated("Organization SSO is not configured");
+    }
     const discovery = await oidcDiscovery();
     const state = crypto.randomBytes(32).toString("base64url");
     const nonce = crypto.randomBytes(32).toString("base64url");
@@ -197,8 +205,30 @@ authRouter.post("/forgot-password", async (req, res, next) => {
 // POST /api/v1/auth/login
 authRouter.post(
   "/login",
-  (_req, _res, next) => next(unauthenticated("Password sign-in is disabled. Use organization SSO.")),
+  (_req, _res, next) => next(unauthenticated("Password sign-in is disabled. Use organization SSO or Quick Demo Sign-in.")),
 );
+// POST /api/v1/auth/demo-login
+authRouter.post("/demo-login", async (req, res, next) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email || typeof email !== "string") {
+      throw badRequest("Email is required");
+    }
+    const normalized = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({
+      where: { email: normalized },
+      select: { id: true, email: true, status: true },
+    });
+    if (!user) {
+      throw unauthenticated(`Account "${normalized}" not found. Please ensure the database has been seeded.`);
+    }
+    const session = await auth.buildSession(user.id, meta(req));
+    setRefreshCookie(res, session.refreshToken);
+    res.status(200).json(session);
+  } catch (e) {
+    next(e);
+  }
+});
 // POST /api/v1/auth/refresh
 authRouter.post(
   "/refresh",

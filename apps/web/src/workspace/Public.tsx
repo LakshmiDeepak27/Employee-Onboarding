@@ -366,7 +366,7 @@ export function Landing() {
 }
 
 export function Login() {
-  const { user, loading, signingOut, error: sessionError } = useSession();
+  const { user, loading, signingOut, error: sessionError, demoLogin } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -377,11 +377,27 @@ export function Login() {
   const ssoSuccess = searchParams.get("sso") === "success";
   const signedOut = searchParams.get("signedOut") === "1";
   const [startingSso, setStartingSso] = useState(false);
+  const [loggingInAs, setLoggingInAs] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading || !user) return;
     navigate(homeFor(user), { replace: true });
   }, [loading, user, navigate]);
+
+  async function handleDemoLogin(email: string) {
+    try {
+      setLoggingInAs(email);
+      setLoginError(null);
+      await demoLogin(email);
+    } catch (err: any) {
+      setLoginError(err?.message || "Demo sign-in failed. Please try again.");
+    } finally {
+      setLoggingInAs(null);
+    }
+  }
+
+  const activeError = loginError || displaySsoError || sessionError;
 
   return (
     <div className="auth-split-container">
@@ -395,10 +411,10 @@ export function Login() {
           <h1 className="auth-heading">Welcome back</h1>
           <p className="auth-subheading">Sign in to continue your onboarding workspace.</p>
 
-          {(displaySsoError || sessionError) && (
+          {activeError && (
             <div className="auth-error-box" role="alert">
               <AlertTriangle size={15} />
-              <span>{displaySsoError || sessionError}</span>
+              <span>{activeError}</span>
             </div>
           )}
           {signingOut && (
@@ -406,12 +422,12 @@ export function Login() {
               Finishing sign out securely…
             </div>
           )}
-          {signedOut && !ssoError && !signingOut && (
+          {signedOut && !activeError && !signingOut && (
             <div className="auth-notice-box" role="status">
               You’re signed out. Sign in again whenever you’re ready.
             </div>
           )}
-          {ssoSuccess && (loading || !user) && !ssoError && (
+          {ssoSuccess && (loading || !user) && !activeError && (
             <div className="auth-notice-box" role="status">
               Signing in succeeded. Loading your workspace…
             </div>
@@ -420,6 +436,45 @@ export function Login() {
             <div className="loading" role="status">Opening your workspace…</div>
           ) : (
             <>
+              <div className="auth-quick-login-section">
+                <div className="auth-divider">
+                  <span>One-Click Role Sign In</span>
+                </div>
+                <div className="auth-quick-login-grid">
+                  <button
+                    type="button"
+                    className="auth-quick-role-btn hr"
+                    onClick={() => void handleDemoLogin("asha.hr@clyora")}
+                    disabled={loading || !!loggingInAs || startingSso}
+                  >
+                    <div className="auth-quick-role-badge">HR Administrator</div>
+                    <div className="auth-quick-role-name">
+                      {loggingInAs === "asha.hr@clyora" ? "Signing in as Asha Rao…" : "Sign In as Asha Rao (HR)"}
+                    </div>
+                    <div className="auth-quick-role-email">asha.hr@clyora</div>
+                    <div className="auth-quick-role-desc">Full access · Plan approvals · Employee directory · Payroll</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="auth-quick-role-btn manager"
+                    onClick={() => void handleDemoLogin("david.manager@clyora")}
+                    disabled={loading || !!loggingInAs || startingSso}
+                  >
+                    <div className="auth-quick-role-badge">Engineering Manager</div>
+                    <div className="auth-quick-role-name">
+                      {loggingInAs === "david.manager@clyora" ? "Signing in as David Chen…" : "Sign In as David Chen (Manager)"}
+                    </div>
+                    <div className="auth-quick-role-email">david.manager@clyora</div>
+                    <div className="auth-quick-role-desc">Direct reports · Welcome buddy · Day-one checklist</div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="auth-divider">
+                <span>Or Organization SSO</span>
+              </div>
+
               <button
                 className="auth-submit-btn"
                 type="button"
@@ -427,7 +482,7 @@ export function Login() {
                   setStartingSso(true);
                   api.auth.oidcStart();
                 }}
-                disabled={loading || startingSso || signingOut}
+                disabled={loading || startingSso || signingOut || !!loggingInAs}
                 aria-busy={startingSso}
               >
                 {startingSso ? (
@@ -438,7 +493,7 @@ export function Login() {
                 {startingSso ? "Connecting to Keycloak…" : "Continue with Organization SSO (Keycloak)"}
               </button>
               <p className="auth-sso-note" role="note">
-                Your workspace and permissions come from your organization account.
+                Enterprise OpenID Connect (requires self-hosted or cloud Keycloak).
               </p>
               <div className="auth-switch-prompt">
                 New employee? Ask HR for an invitation link.

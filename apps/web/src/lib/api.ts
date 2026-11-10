@@ -193,6 +193,11 @@ export const api = {
     oidcStart: () => {
       window.location.assign(`${BASE}/auth/oidc/start`);
     },
+    demoLogin: (email: string) =>
+      request<LoginResponse>("/auth/demo-login", {
+        method: "POST",
+        body: { email },
+      }),
     logout: (allDevices = false) =>
       request<{ message: string }>("/auth/logout", {
         method: "POST",
