@@ -70,8 +70,12 @@ authRouter.get("/oidc/start", async (req, res, next) => {
     if (!oidcConfigured()) {
       const acceptsHtml = req.accepts(["html", "json"]) === "html" || !req.headers.accept || req.headers.accept.includes("text/html");
       if (acceptsHtml) {
-        const frontend = env.CORS_ORIGIN.split(",")[0]!.trim();
-        return res.redirect(`${frontend}/login?error=${encodeURIComponent("Organization SSO (Keycloak) is not configured on this cloud deployment. Please use the Quick Demo Sign-in buttons below.")}`);
+        let target = "/login";
+        const firstOrigin = env.CORS_ORIGIN.split(",")[0]?.trim();
+        if (firstOrigin && (firstOrigin.startsWith("http://") || firstOrigin.startsWith("https://"))) {
+          target = `${firstOrigin}/login`;
+        }
+        return res.redirect(`${target}?error=${encodeURIComponent("Keycloak SSO is running on your local machine (localhost:8080), which the cloud Render server cannot reach. Please use the One-Click Demo Sign-in buttons above.")}`);
       }
       throw unauthenticated("Organization SSO is not configured");
     }
