@@ -1,11 +1,12 @@
 /**
- * Seeds only the access-control catalog by default.
+ * Seeds the RBAC catalog and foundational reference records (jurisdictions and departments).
  *
- * Idempotent: safe to run repeatedly. The RBAC section is the important part
- * — roles and permissions come from packages/contracts/src/rbac.ts, which is
- * the single source of truth. Change the catalog there, re-run this, done.
+ * Idempotent: safe to run repeatedly on both fresh and existing databases.
+ * The RBAC section ensures roles and permissions come from packages/contracts/src/rbac.ts,
+ * which is the single source of truth.
  *
- * Optional starter configuration and demo records are disabled by default.
+ * Required reference records (locations & departments) are always initialized before
+ * presentation or demo user accounts so foreign key relationships are reliably satisfied.
  */
 import dotenv from 'dotenv';
 dotenv.config();
@@ -253,6 +254,10 @@ async function resetPresentationWorkspace() {
 async function seedPresentationUsers() {
   console.log('  HR and manager identity profiles...');
 
+  // Ensure required departments and jurisdictions exist before querying them
+  await seedJurisdictions();
+  await seedDepartments();
+
   async function makeUser(email: string, roleKey: string) {
     const role = await prisma.role.findUniqueOrThrow({ where: { key: roleKey } });
     const user = await prisma.user.upsert({
@@ -413,21 +418,37 @@ async function main() {
     assertLocalPresentationReset();
     await resetPresentationWorkspace();
   }
+  // 1. Roles and permissions (RBAC)
   await seedRbac();
-  // Presentation mode is deliberately fixed to Asha (HR) and David (manager).
-  // Do not allow BOOTSTRAP_HR_EMAIL to add another application user.
-  if (process.env.SEED_PRESENTATION_USERS !== 'true') await seedBootstrapHr();
-  if (process.env.SEED_REFERENCE_DATA === 'true' || process.argv.includes('--reference')) {
-    await seedJurisdictions();
-    await seedDepartments();
+
+  // 2. Foundational reference records: jurisdictions (locations) & departments
+  // Initialized before presentation users, bootstrap HR, or any employees are created.
+  await seedJurisdictions();
+  await seedDepartments();
+
+  // 3. Catalogs: equipment, benefits, training, and policy documents
+  if (
+    process.env.SEED_REFERENCE_DATA === 'true' ||
+    process.env.SEED_DEMO_DATA === 'true' ||
+    process.env.SEED_PRESENTATION_USERS === 'true' ||
+    process.argv.includes('--reference') ||
+    process.env.SEED_REFERENCE_DATA !== 'false'
+  ) {
     await seedCatalogs();
   } else {
-    console.log('  starter reference records skipped');
+    console.log('  starter reference catalog records skipped');
   }
+
+  // 4. Presentation & demo identities (Asha HR & David Manager)
   if (process.env.SEED_DEMO_DATA === 'true' || process.env.SEED_PRESENTATION_USERS === 'true') {
     await seedPresentationUsers();
   } else {
     console.log('  presentation identities skipped');
+  }
+
+  // 5. Bootstrap HR account (if configured and not presentation mode)
+  if (process.env.SEED_PRESENTATION_USERS !== 'true') {
+    await seedBootstrapHr();
   }
 
   const counts = {
@@ -437,6 +458,7 @@ async function main() {
     users: await prisma.user.count(),
     employees: await prisma.employee.count(),
     jurisdictions: await prisma.jurisdiction.count(),
+    departments: await prisma.department.count(),
     policyDocuments: await prisma.policyDocument.count(),
     policyClauses: await prisma.policyClause.count(),
   };
