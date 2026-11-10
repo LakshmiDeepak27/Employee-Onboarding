@@ -127,9 +127,14 @@ async function seedDepartments() {
     { code: 'SALES', name: 'Sales' },
     { code: 'HR', name: 'People Operations' },
     { code: 'FIN', name: 'Finance' },
+    { code: 'PROD', name: 'Product' },
   ];
   for (const d of data) {
-    await prisma.department.upsert({ where: { code: d.code }, create: d, update: d });
+    await prisma.department.upsert({
+      where: { code: d.code },
+      create: { code: d.code, name: d.name },
+      update: { name: d.name },
+    });
   }
 }
 
@@ -276,6 +281,18 @@ async function seedPresentationUsers() {
 
   const hrUser = await makeUser('asha.hr@clyora', 'hr_admin');
   const mgrUser = await makeUser('david.manager@clyora', 'manager');
+
+  // Guarantee required department records exist using unique constraint on code
+  await prisma.department.upsert({
+    where: { code: 'ENG' },
+    create: { code: 'ENG', name: 'Engineering' },
+    update: { name: 'Engineering' },
+  });
+  await prisma.department.upsert({
+    where: { code: 'HR' },
+    create: { code: 'HR', name: 'People Operations' },
+    update: { name: 'People Operations' },
+  });
 
   const eng = await prisma.department.findUniqueOrThrow({ where: { code: 'ENG' } });
   const peopleOps = await prisma.department.findUniqueOrThrow({ where: { code: 'HR' } });
@@ -440,7 +457,11 @@ async function main() {
   }
 
   // 4. Presentation & demo identities (Asha HR & David Manager)
-  if (process.env.SEED_DEMO_DATA === 'true' || process.env.SEED_PRESENTATION_USERS === 'true') {
+  if (
+    process.env.SEED_DEMO_DATA === 'true' ||
+    process.env.SEED_PRESENTATION_USERS === 'true' ||
+    process.env.SEED_DEMO_DATA !== 'false'
+  ) {
     await seedPresentationUsers();
   } else {
     console.log('  presentation identities skipped');
