@@ -15,7 +15,7 @@ CLYORA coordinates employee onboarding across HR, managers, IT, finance, and emp
 | Presentation slides | [CLYORA Presentation Slides (PPTX)](output/presentations/CLYORA_Employee_Onboarding_Presentation.pptx) |
 | Source code | [GitHub repository](https://github.com/LakshmiDeepak27/Employee-Onboarding) |
 | DOCS | [https://employee-onboarding-du20.onrender.com/docs](https://employee-onboarding-du20.onrender.com/docs) |
-| API reference (live) |[https://employee-onboarding-du20.onrender.com/](https://employee-onboarding-du20.onrender.com/)|
+| Project (live) |[https://employee-onboarding-du20.onrender.com/](https://employee-onboarding-du20.onrender.com/)|
 
 ## Presentation
 
