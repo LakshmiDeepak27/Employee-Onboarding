@@ -10,7 +10,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build -w @eo/contracts && npm run build -w @eo/api && npm run build -w @eo/web",
+    "build": "npm run db:generate && npm run build -w @eo/contracts && npm run build -w @eo/api && npm run build -w @eo/web",
     "start": "node apps/api/dist/index.js",
     "dev": "npm run dev -w @eo/api",
     "dev:api": "npm run dev -w @eo/api",

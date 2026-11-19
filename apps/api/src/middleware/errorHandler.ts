@@ -77,7 +77,11 @@ export function errorHandler(
     error: {
       code: appError.code,
       message:
-        appError.expose || !isProd ? appError.message : "Something went wrong",
+        appError.expose || !isProd
+          ? appError.message
+          : (err as any)?.message
+            ? `${appError.message}: ${(err as any).message}`
+            : appError.message,
       ...(appError.fields ? { fields: appError.fields } : {}),
       requestId: req.requestId,
       timestamp: new Date().toISOString(),
