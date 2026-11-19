@@ -1,9 +1,75 @@
-import type { ChatResponse } from '@eo/contracts';
+import type { ChatResponse, ActionProposal } from '@eo/contracts';
 import { prisma } from '../db/client.js';
 import { env } from '../config/env.js';
 import type { AuthContext } from '../middleware/authenticate.js';
 import { fallback, parseProviderOutput } from './chatbot-logic.js';
 import { GoogleGenAI } from '@google/genai';
+
+export function inferActionProposal(message: string, answer: string): ActionProposal | null {
+  const combined = (message + ' ' + answer).toLowerCase();
+
+  if (/\b(doc|document|id proof|passport|address proof|tax|td1|i-9|upload|identity|verification|birth certificate)\b/i.test(combined)) {
+    return {
+      type: 'DOCUMENTS',
+      title: 'Identity & Right-to-Work Documents',
+      description: 'Review statutory identification and complete tax withholding verification forms.',
+      actionLabel: 'Review Documents',
+      route: '/documents',
+    };
+  }
+
+  if (/\b(equipment|laptop|macbook|thinkpad|monitor|hardware|badge|keyboard|dispatch|shipment|mouse|headset)\b/i.test(combined)) {
+    return {
+      type: 'EQUIPMENT',
+      title: 'Hardware & IT Equipment',
+      description: 'Review workstation provisioning status, hardware tracking, or request accessories.',
+      actionLabel: 'View Equipment',
+      route: '/equipment',
+    };
+  }
+
+  if (/\b(payroll|salary|bank|direct deposit|account|withholding|compensation|paycheck|direct-deposit)\b/i.test(combined)) {
+    return {
+      type: 'PAYROLL',
+      title: 'Payroll & Direct Deposit Setup',
+      description: 'Confirm direct deposit banking information and review statutory withholdings.',
+      actionLabel: 'Verify Payroll',
+      route: '/payroll',
+    };
+  }
+
+  if (/\b(benefit|insurance|medical|health|dental|pension|vision|retirement|401k|wellness)\b/i.test(combined)) {
+    return {
+      type: 'BENEFITS',
+      title: 'Statutory & Voluntary Benefits',
+      description: 'Enroll in company medical, health insurance, and workplace pension plans.',
+      actionLabel: 'Elect Benefits',
+      route: '/benefits',
+    };
+  }
+
+  if (/\b(training|course|learning|l&d|ohs|security|compliance|mandatory|safety)\b/i.test(combined)) {
+    return {
+      type: 'TRAINING',
+      title: 'Statutory Compliance Training',
+      description: 'Access occupational health, data protection, and info security training modules.',
+      actionLabel: 'Start Training',
+      route: '/training',
+    };
+  }
+
+  if (/\b(buddy|manager|1-on-1|1:1|check-in|agenda|reporting|team|day 1|day one)\b/i.test(combined)) {
+    return {
+      type: 'MANAGER',
+      title: 'Manager Day-1 & Buddy Workspace',
+      description: 'Assign onboarding peer buddy and review first-week orientation agenda.',
+      actionLabel: 'Open Manager Tasks',
+      route: '/managing',
+    };
+  }
+
+  return null;
+}
 
 type RetrievedPolicyClause = {
   id: string;
@@ -57,12 +123,14 @@ function sourceAnswer(
     body: string;
     document: { title: string; sourceUri: string };
   }>,
+  cleanMsg = '',
 ): ChatResponse {
   const excerpt = (body: string) => (body.length > 220 ? `${body.slice(0, 217).trimEnd()}…` : body);
+  const answer =
+    'Company policy says:\n' +
+    clauses.slice(0, 2).map((clause) => `• ${clause.heading ?? clause.document.title}: ${excerpt(clause.body)}`).join('\n');
   return {
-    answer:
-      'Company policy says:\n' +
-      clauses.slice(0, 2).map((clause) => `• ${clause.heading ?? clause.document.title}: ${excerpt(clause.body)}`).join('\n'),
+    answer,
     citations: clauses.map((clause) => ({
       clauseId: clause.id,
       heading: clause.heading,
@@ -72,6 +140,7 @@ function sourceAnswer(
     grounded: true,
     provider: 'fallback',
     refusal: null,
+    actionProposal: inferActionProposal(cleanMsg, answer),
   };
 }
 
@@ -251,6 +320,7 @@ Provide a direct, helpful, and beautifully formatted answer.`;
           grounded: clauses.length > 0,
           provider: 'gemini',
           refusal: null,
+          actionProposal: inferActionProposal(cleanMsg, answerText),
         };
       }
     } catch (e: any) {
@@ -260,22 +330,25 @@ Provide a direct, helpful, and beautifully formatted answer.`;
 
   // 7. Fallback if clauses exist
   if (clauses.length > 0) {
-    return sourceAnswer(clauses);
+    return sourceAnswer(clauses, cleanMsg);
   }
 
   // 8. Helpful Onboarding Domain Guidance if no exact clause matched
-  return {
-    answer: `Here is guidance regarding your question about **"${cleanMsg}"**:
+  const guidanceAnswer = `Here is guidance regarding your question about **"${cleanMsg}"**:
 
 • **HR & Documentation**: Complete identity verification, statutory tax forms (Form 12BB / TD1), and emergency contacts in the employee portal.
 • **Equipment & IT**: Laptops are imaged and dispatched 3–5 business days before start date.
 • **Benefits & Healthcare**: Health, dental, and retirement elections can be submitted within your 30-day enrollment window.
 • **Manager & Team**: Your reporting manager will schedule your first 1:1 meeting and team onboarding buddy.
 
-For custom policy inquiries, contact your HR administrator at **asha.hr@clyora**.`,
+For custom policy inquiries, contact your HR administrator at **asha.hr@clyora**.`;
+
+  return {
+    answer: guidanceAnswer,
     citations: [],
     grounded: true,
     provider: 'fallback',
     refusal: null,
+    actionProposal: inferActionProposal(cleanMsg, guidanceAnswer),
   };
 }

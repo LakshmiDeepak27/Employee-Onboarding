@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { X, Minus, Send, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { api } from "../lib/api";
 import type { ChatResponse } from "@eo/contracts";
@@ -147,6 +148,7 @@ export function ChatWidget() {
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [speakingId, setSpeakingId] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -415,6 +417,23 @@ export function ChatWidget() {
 
                   <div className="clyora-msg-bubble">
                     <FormattedMessage text={m.text} />
+                    {m.response?.actionProposal && (
+                      <div className="clyora-action-proposal-card">
+                        <div className="clyora-action-card-badge">Suggested Workflow Action</div>
+                        <div className="clyora-action-card-title">{m.response.actionProposal.title}</div>
+                        <div className="clyora-action-card-desc">{m.response.actionProposal.description}</div>
+                        <button
+                          type="button"
+                          className="clyora-action-card-btn"
+                          onClick={() => {
+                            setOpen(false);
+                            navigate(m.response!.actionProposal!.route);
+                          }}
+                        >
+                          <span>👉 {m.response.actionProposal.actionLabel}</span>
+                        </button>
+                      </div>
+                    )}
                     {m.response?.citations && m.response.citations.length > 0 && (
                       <div className="clyora-msg-citations">
                         <span className="clyora-citation-title">Grounded Sources:</span>

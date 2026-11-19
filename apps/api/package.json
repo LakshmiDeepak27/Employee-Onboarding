@@ -19,7 +19,8 @@
     "db:seed:reference": "node scripts/with-root-env.cjs tsx prisma/seed.ts --reference",
     "db:seed:templates": "node scripts/with-root-env.cjs tsx prisma/seed-templates.ts",
     "keycloak:clean:presentation": "node scripts/with-root-env.cjs tsx scripts/clean-presentation-keycloak.ts",
-    "db:deploy": "node scripts/with-root-env.cjs prisma migrate deploy"
+    "db:deploy": "node scripts/with-root-env.cjs prisma migrate deploy",
+    "mcp": "node scripts/with-root-env.cjs tsx src/mcp/server.ts"
   },
   "dependencies": {
     "@eo/contracts": "*",

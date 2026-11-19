@@ -31,6 +31,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && npm run openapi:check && npm test && npm run build",
+    "eval": "tsx evals/run_evals.ts",
+    "mcp": "npm run mcp -w @eo/api",
     "db:deploy": "npm run db:deploy -w @eo/api",
     "db:seed:templates": "npm run db:seed:templates -w @eo/api",
     "setup": "npm ci && npm run db:generate && npm run db:deploy && npm run db:seed:reference && npm run db:seed:templates && npm run build",
