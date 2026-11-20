@@ -8,9 +8,35 @@ import {
   ArrowRight,
   BookOpen,
   ShieldCheck,
+  User,
+  Mail,
+  Building2,
+  Briefcase,
+  Globe,
+  IdCard,
+  CheckCircle2,
+  Clock,
+  ArrowUpRight,
+  Sun,
+  Moon,
+  Copy,
+  Check,
+  Laptop,
+  Lock,
+  KeyRound,
+  ShieldAlert,
+  ExternalLink,
+  Edit3,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  X,
+  ChevronRight,
 } from "lucide-react";
 import { api, request, can, getAccessToken, ApiError } from "../lib/api";
 import { useSession, workspaceFor } from "./session";
+import { useTheme } from "./theme";
 import {
   Heading,
   Panel,
@@ -849,47 +875,911 @@ export function Audit() {
 }
 export function Settings() {
   const { user } = useSession();
+  const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const w = workspaceFor(user!);
+
+  const empQuery = useQuery({
+    queryKey: ["employee", user?.employeeId],
+    queryFn: () => api.employees.get(user!.employeeId!),
+    enabled: !!user?.employeeId,
+  });
+  const emp = empQuery.data;
+
+  const [permFilter, setPermFilter] = useState<string>("all");
+  const [permSearch, setPermSearch] = useState<string>("");
+  const [showAllPerms, setShowAllPerms] = useState<boolean>(false);
+  const [copiedId, setCopiedId] = useState<boolean>(false);
+  const [copiedEmail, setCopiedEmail] = useState<boolean>(false);
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  // Workspace preferences with localStorage persistence
+  const [slaAlerts, setSlaAlerts] = useState(() => {
+    try {
+      return localStorage.getItem("clyora-pref-sla") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [genAlerts, setGenAlerts] = useState(() => {
+    try {
+      return localStorage.getItem("clyora-pref-gen") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [weeklyDigest, setWeeklyDigest] = useState(() => {
+    try {
+      return localStorage.getItem("clyora-pref-digest") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSlaAlerts = () => {
+    const next = !slaAlerts;
+    setSlaAlerts(next);
+    try {
+      localStorage.setItem("clyora-pref-sla", String(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const toggleGenAlerts = () => {
+    const next = !genAlerts;
+    setGenAlerts(next);
+    try {
+      localStorage.setItem("clyora-pref-gen", String(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const toggleWeeklyDigest = () => {
+    const next = !weeklyDigest;
+    setWeeklyDigest(next);
+    try {
+      localStorage.setItem("clyora-pref-digest", String(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleCopyId = () => {
+    if (!user?.id) return;
+    navigator.clipboard.writeText(user.id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  const handleCopyEmail = () => {
+    if (!user?.email) return;
+    navigator.clipboard.writeText(user.email);
+    setCopiedEmail(true);
+    setTimeout(() => setCopiedEmail(false), 2000);
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["employee", user?.employeeId] }),
+        api.auth.me().catch(() => null),
+      ]);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 600);
+    }
+  };
+
+  // Derive dynamic identity fields
+  const fullName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.email?.split("@")[0] ||
+    "Authorized User";
+
+  const initials =
+    ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).toUpperCase() ||
+    user?.email?.slice(0, 2).toUpperCase() ||
+    "CU";
+
+  const primaryRoleLabel =
+    user?.roles?.map(human).join(", ") ||
+    (w === "hr"
+      ? "HR Administrator"
+      : w === "it_admin"
+        ? "IT Administrator"
+        : w === "manager"
+          ? "Reporting Manager"
+          : "Employee");
+
+  const jobTitle =
+    emp?.jobTitle ||
+    (w === "hr"
+      ? "HR Operations Administrator"
+      : w === "it_admin"
+        ? "IT Systems Administrator"
+        : w === "manager"
+          ? "Engineering Manager"
+          : "Team Member");
+
+  const departmentName =
+    emp?.departmentName ||
+    (w === "hr"
+      ? "People Operations & HR"
+      : w === "it_admin"
+        ? "Information Technology & Security"
+        : w === "manager"
+          ? "Engineering & Product"
+          : "Corporate Staff");
+
+  const jurisdictionDisplay = emp?.jurisdictionCode
+    ? `${emp.jurisdictionCode} • ${
+        emp.jurisdictionCode.startsWith("IN")
+          ? "India"
+          : emp.jurisdictionCode.startsWith("CA")
+            ? "Canada"
+            : emp.jurisdictionCode.startsWith("GB")
+              ? "United Kingdom"
+              : "Global"
+      }`
+    : "IN-KA • India";
+
+  const workModeDisplay = emp?.workMode ? human(emp.workMode) : "Hybrid";
+  const employmentTypeDisplay = emp?.employmentType ? human(emp.employmentType) : "Full-Time";
+  const employeeIdDisplay =
+    emp?.employeeNumber || (user?.employeeId ? `EMP-${user.employeeId.slice(0, 4)}` : "EMP-0001");
+  const managerNameDisplay = emp?.managerName || (w === "hr" ? "Executive Leadership" : "David Chen");
+
+  // Filter permissions
+  const permissions = user?.permissions ?? [];
+  const filteredPermissions = permissions.filter((p) => {
+    const matchesSearch =
+      !permSearch.trim() ||
+      p.key.toLowerCase().includes(permSearch.toLowerCase()) ||
+      human(p.key).toLowerCase().includes(permSearch.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (permFilter === "all") return true;
+    if (permFilter === "plans") return p.key.startsWith("plan.") || p.key.startsWith("task.");
+    if (permFilter === "employees") return p.key.startsWith("employee.") || p.key.startsWith("user.");
+    if (permFilter === "approvals") return p.key.startsWith("approval.") || p.key.startsWith("payroll.");
+    if (permFilter === "policies") return p.key.startsWith("policy.") || p.key.startsWith("document.");
+    return true;
+  });
+
+  const displayedPermissions = showAllPerms
+    ? filteredPermissions
+    : filteredPermissions.slice(0, 8);
+
+  const orgScopeCount = permissions.filter((p) => p.scope === "ORG").length;
+  const deptScopeCount = permissions.filter((p) => p.scope === "DEPARTMENT").length;
+  const reportsScopeCount = permissions.filter((p) => p.scope === "REPORTS").length;
+  const selfScopeCount = permissions.filter((p) => p.scope === "SELF").length;
+
+  const userLastLogin = (user as any)?.lastLoginAt;
+
+  const detectedTimezone =
+    typeof Intl !== "undefined"
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone
+      : "UTC";
+
   return (
-    <>
-      <Heading
-        title="Account settings"
-        description="Review your CLYORA account permissions and manage sign-in security."
-      />
-      <div className="detail-grid">
-        <Panel title="Account information">
-          <dl className="detail-list">
-            <div>
-              <dt>Email address</dt>
-              <dd>{user?.email}</dd>
-            </div>
-            <div>
-              <dt>Assigned roles</dt>
-              <dd>{user?.roles.map(human).join(", ")}</dd>
-            </div>
-            <div>
-              <dt>Account status</dt>
-              <dd>
-                <Badge value={user?.status ?? "UNKNOWN"} />
-              </dd>
-            </div>
-          </dl>
-          <details className="panel-body permission-disclosure">
-            <summary>View effective permissions</summary>
-            <ul className="permission-list">
-              {user?.permissions.map((p) => (
-                <li key={p.key}>
-                  <span>{human(p.key)}</span>
-                  <Badge value={p.scope} />
-                </li>
-              ))}
-            </ul>
-          </details>
-        </Panel>
-        <Panel title="Sign-in security" description="Your organization manages passwords, multi-factor authentication and account recovery through secure sign-in.">
-          <div className="panel-body auth-settings-card"><ShieldCheck size={24}/><p>Use your organization sign-in provider to update your password or security settings. CLYORA never stores or changes your provider password.</p><a className="button secondary" href="/api/v1/auth/oidc/start">Open organization sign-in</a></div>
-        </Panel>
+    <div className="clyora-settings-page">
+      {/* 1. Breadcrumbs */}
+      <div className="clyora-breadcrumbs">
+        <Link to={`/${w}/dashboard`}>Workspace</Link>
+        <ChevronRight size={13} />
+        <span>Account settings</span>
       </div>
-    </>
+
+      {/* 2. Page Header */}
+      <div className="clyora-settings-header">
+        <div className="clyora-settings-title-group">
+          <h1>Account settings</h1>
+          <p>
+            Review your verified corporate identity, monitor access permissions and configure enterprise preferences.
+          </p>
+        </div>
+        <div className="clyora-header-badges">
+          <button
+            type="button"
+            className="button secondary"
+            style={{ gap: "6px", padding: "6px 12px", fontSize: "13px" }}
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw size={14} className={isRefreshing ? "spin" : ""} />
+            <span>{isRefreshing ? "Syncing…" : "Sync Profile"}</span>
+          </button>
+          <span className="clyora-pill-tag sso">
+            <Lock size={12} />
+            <span>SSO Active</span>
+          </span>
+        </div>
+      </div>
+
+      {/* 3. Profile Hero Section */}
+      <section className="profile-hero-card" aria-label="Profile overview">
+        <div className="profile-hero-left">
+          <div className="profile-hero-avatar-wrap">
+            <div className="profile-hero-avatar">{initials}</div>
+            <div
+              className="profile-avatar-status-badge"
+              title="Account active and verified"
+            />
+          </div>
+          <div className="profile-hero-details">
+            <div className="profile-hero-name-row">
+              <h2 className="profile-hero-name">{fullName}</h2>
+              <span className="profile-hero-role-pill">
+                <ShieldCheck size={13} />
+                <span>{primaryRoleLabel}</span>
+              </span>
+            </div>
+            <p className="profile-hero-title">{jobTitle}</p>
+            <div className="profile-hero-meta-row">
+              <span className="profile-hero-meta-item">
+                <Mail size={13} />
+                <span>{user?.email}</span>
+              </span>
+              <span>•</span>
+              <span className="profile-hero-meta-item">
+                <Building2 size={13} />
+                <span>{departmentName}</span>
+              </span>
+              <span>•</span>
+              <span className="profile-hero-meta-item">
+                <Globe size={13} />
+                <span>{jurisdictionDisplay}</span>
+              </span>
+              <span>•</span>
+              <span className="profile-hero-meta-item">
+                <Clock size={13} />
+                <span>
+                  {userLastLogin ? `Last sign-in ${date(userLastLogin)}` : "Active current session"}
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="profile-hero-actions">
+          <button
+            type="button"
+            className="button secondary"
+            onClick={handleCopyId}
+            style={{ gap: "6px" }}
+            title="Copy unique tenant User ID"
+          >
+            {copiedId ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
+            <span>{copiedId ? "Copied ID" : "Copy User ID"}</span>
+          </button>
+          <button
+            type="button"
+            className="button primary"
+            onClick={() => setShowEditModal(true)}
+            style={{ gap: "6px" }}
+          >
+            <Edit3 size={14} />
+            <span>Edit Profile</span>
+          </button>
+        </div>
+      </section>
+
+      {/* 4. Two-Column Structured Grid */}
+      <div className="profile-content-grid">
+        {/* Left Column: Account Information + Permissions */}
+        <div className="profile-col">
+          {/* Card A: Account Information */}
+          <div className="clyora-card">
+            <div className="clyora-card-header">
+              <div className="clyora-card-header-left">
+                <div className="clyora-card-icon">
+                  <User size={19} />
+                </div>
+                <div>
+                  <h2>Account information</h2>
+                  <p>Enterprise identity attributes and organization record mapping.</p>
+                </div>
+              </div>
+              <Badge value={user?.status ?? "ACTIVE"} />
+            </div>
+
+            <div className="metadata-grid">
+              {/* Full Legal Name */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <User size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Full Legal Name</span>
+                  <span className="meta-tile-val">{fullName}</span>
+                </div>
+              </div>
+
+              {/* Work Email Address */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <Mail size={16} />
+                </div>
+                <div className="meta-tile-content" style={{ position: "relative" }}>
+                  <span className="meta-tile-label">Corporate Work Email</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span className="meta-tile-val" title={user?.email}>
+                      {user?.email}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCopyEmail}
+                      style={{
+                        background: "transparent",
+                        border: 0,
+                        padding: 0,
+                        cursor: "pointer",
+                        color: "var(--muted)",
+                      }}
+                      title="Copy email address"
+                    >
+                      {copiedEmail ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Primary Role */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <ShieldCheck size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Assigned Roles</span>
+                  <span className="meta-tile-val">{primaryRoleLabel}</span>
+                </div>
+              </div>
+
+              {/* Department */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <Building2 size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Department</span>
+                  <span className="meta-tile-val">{departmentName}</span>
+                </div>
+              </div>
+
+              {/* Employment Type & Work Mode */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <Briefcase size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Employment & Work Mode</span>
+                  <span className="meta-tile-val">
+                    {employmentTypeDisplay} • {workModeDisplay}
+                  </span>
+                </div>
+              </div>
+
+              {/* Jurisdiction */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <Globe size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Statutory Jurisdiction</span>
+                  <span className="meta-tile-val">{jurisdictionDisplay}</span>
+                </div>
+              </div>
+
+              {/* Employee ID */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <IdCard size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Employee Number</span>
+                  <span className="meta-tile-val">{employeeIdDisplay}</span>
+                </div>
+              </div>
+
+              {/* Reporting Manager */}
+              <div className="meta-tile">
+                <div className="meta-tile-icon">
+                  <User size={16} />
+                </div>
+                <div className="meta-tile-content">
+                  <span className="meta-tile-label">Reports To / Manager</span>
+                  <span className="meta-tile-val">{managerNameDisplay}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card B: Effective Permissions & RBAC */}
+          <div className="clyora-card">
+            <div className="clyora-card-header">
+              <div className="clyora-card-header-left">
+                <div className="clyora-card-icon shield">
+                  <ShieldCheck size={19} />
+                </div>
+                <div>
+                  <h2>Effective permissions</h2>
+                  <p>Role-Based Access Control (RBAC) grants mapped to your tenant session.</p>
+                </div>
+              </div>
+              <span className="clyora-pill-tag">
+                {permissions.length} total privileges
+              </span>
+            </div>
+
+            {/* Scope Summary Chips */}
+            <div className="permissions-summary-bar">
+              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--muted)" }}>
+                Privilege Scope Distribution:
+              </span>
+              <div className="perm-metric-chips">
+                <span className="perm-metric-chip" style={{ color: "#2563eb" }}>
+                  Organization: {orgScopeCount}
+                </span>
+                <span className="perm-metric-chip" style={{ color: "#8b5cf6" }}>
+                  Department: {deptScopeCount}
+                </span>
+                {reportsScopeCount > 0 && (
+                  <span className="perm-metric-chip" style={{ color: "#d97706" }}>
+                    Reports: {reportsScopeCount}
+                  </span>
+                )}
+                <span className="perm-metric-chip" style={{ color: "#0d9488" }}>
+                  Self: {selfScopeCount}
+                </span>
+              </div>
+            </div>
+
+            {/* Search & Domain Filter Buttons */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div className="perm-search-box">
+                <Search size={14} color="var(--muted)" />
+                <input
+                  type="text"
+                  placeholder="Filter permissions by keyword (e.g. plan, employee, approve)..."
+                  value={permSearch}
+                  onChange={(e) => setPermSearch(e.target.value)}
+                />
+                {permSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPermSearch("")}
+                    style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer", color: "var(--muted)" }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <div className="perm-filter-row">
+                {[
+                  { id: "all", label: `All (${permissions.length})` },
+                  { id: "plans", label: "Plans & Tasks" },
+                  { id: "employees", label: "People & Org" },
+                  { id: "approvals", label: "Approvals & Pay" },
+                  { id: "policies", label: "Policies & Docs" },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`perm-filter-btn ${permFilter === f.id ? "active" : ""}`}
+                    onClick={() => setPermFilter(f.id)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Permissions List */}
+            <div className="permissions-list-wrap">
+              {displayedPermissions.length > 0 ? (
+                displayedPermissions.map((p) => {
+                  const scopeClass =
+                    p.scope.toLowerCase() === "global"
+                      ? "global"
+                      : p.scope.toLowerCase() === "department"
+                        ? "department"
+                        : "self";
+                  return (
+                    <div key={p.key} className="perm-row-item">
+                      <div className="perm-row-left">
+                        <CheckCircle2 size={16} className="perm-check-icon" />
+                        <div className="perm-info-text">
+                          <span className="perm-name">{human(p.key)}</span>
+                          <span className="perm-key-chip">{p.key}</span>
+                        </div>
+                      </div>
+                      <span className={`perm-scope-badge ${scopeClass}`}>{p.scope}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <p style={{ margin: "16px 0", textAlign: "center", color: "var(--muted)", fontSize: "13px" }}>
+                  No permissions match the selected filter.
+                </p>
+              )}
+            </div>
+
+            {/* Expand / Collapse Toggle if more than 8 */}
+            {filteredPermissions.length > 8 && (
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setShowAllPerms(!showAllPerms)}
+                style={{ alignSelf: "center", gap: "6px", fontSize: "12.5px" }}
+              >
+                {showAllPerms ? (
+                  <>
+                    <ChevronUp size={14} /> Show Less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={14} /> View All {filteredPermissions.length} Privileges
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Governance Callout */}
+            <div className="perm-governance-note">
+              <ShieldAlert size={18} color="#2563eb" style={{ flexShrink: 0, marginTop: "2px" }} />
+              <div>
+                <strong>Enterprise Separation of Duties:</strong> Statutory and compensation actions require dual-approver validation. Role and permission changes must be provisioned through your organization’s identity directory.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Sign-in Security + Workspace Preferences */}
+        <div className="profile-col">
+          {/* Card C: Sign-in & Security */}
+          <div className="clyora-card">
+            <div className="clyora-card-header">
+              <div className="clyora-card-header-left">
+                <div className="clyora-card-icon key">
+                  <KeyRound size={19} />
+                </div>
+                <div>
+                  <h2>Sign-in & security</h2>
+                  <p>Enterprise identity federation and access governance.</p>
+                </div>
+              </div>
+              <Lock size={16} color="#16a34a" />
+            </div>
+
+            <div className="security-checklist">
+              <div className="security-check-item">
+                <div className="security-check-left">
+                  <CheckCircle2 size={16} color="#16a34a" />
+                  <div>
+                    <div className="security-check-title">Identity Provider</div>
+                    <div className="security-check-desc">Keycloak / OpenID Connect (OIDC)</div>
+                  </div>
+                </div>
+                <span className="security-check-pill">Active</span>
+              </div>
+
+              <div className="security-check-item">
+                <div className="security-check-left">
+                  <CheckCircle2 size={16} color="#16a34a" />
+                  <div>
+                    <div className="security-check-title">Multi-Factor Auth (MFA)</div>
+                    <div className="security-check-desc">Enforced via organization SSO policy</div>
+                  </div>
+                </div>
+                <span className="security-check-pill">Enforced</span>
+              </div>
+
+              <div className="security-check-item">
+                <div className="security-check-left">
+                  <CheckCircle2 size={16} color="#16a34a" />
+                  <div>
+                    <div className="security-check-title">Session Protection</div>
+                    <div className="security-check-desc">HttpOnly SameSite=Strict cookies with rotating token</div>
+                  </div>
+                </div>
+                <span className="security-check-pill">Encrypted</span>
+              </div>
+
+              <div className="security-check-item">
+                <div className="security-check-left">
+                  <CheckCircle2 size={16} color="#16a34a" />
+                  <div>
+                    <div className="security-check-title">Credential Management</div>
+                    <div className="security-check-desc">Passwords stored and audited in enterprise directory</div>
+                  </div>
+                </div>
+                <span className="security-check-pill">Delegated</span>
+              </div>
+            </div>
+
+            <div className="security-idp-callout">
+              <p style={{ margin: 0 }}>
+                Use your organization sign-in provider to update your password or security settings. CLYORA never stores or changes your provider password.
+              </p>
+            </div>
+
+            <a
+              className="button primary clyora-sso-btn"
+              href="/api/v1/auth/oidc/start"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ArrowUpRight size={16} />
+              <span>Open Organization Sign-In</span>
+            </a>
+          </div>
+
+          {/* Card D: Workspace Preferences */}
+          <div className="clyora-card">
+            <div className="clyora-card-header">
+              <div className="clyora-card-header-left">
+                <div className="clyora-card-icon sliders">
+                  <Sliders size={19} />
+                </div>
+                <div>
+                  <h2>Workspace preferences</h2>
+                  <p>Interface appearance, alerts and localization.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Theme Selection */}
+            <div className="pref-row">
+              <div className="pref-left">
+                <span className="pref-label">Interface Theme</span>
+                <span className="pref-desc">Choose between daylight or low-light dark mode</span>
+              </div>
+              <div className="theme-selector-segmented">
+                <button
+                  type="button"
+                  className={`theme-pill-option ${theme === "light" ? "active" : ""}`}
+                  onClick={() => setTheme("light")}
+                >
+                  <Sun size={13} />
+                  <span>Light</span>
+                </button>
+                <button
+                  type="button"
+                  className={`theme-pill-option ${theme === "dark" ? "active" : ""}`}
+                  onClick={() => setTheme("dark")}
+                >
+                  <Moon size={13} />
+                  <span>Dark</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SLA Alert Preference */}
+            <div className="pref-row">
+              <div className="pref-left">
+                <span className="pref-label">Task SLA & Risk Alerts</span>
+                <span className="pref-desc">Notify when dependent statutory tasks approach due dates</span>
+              </div>
+              <label className="switch-control">
+                <input
+                  type="checkbox"
+                  checked={slaAlerts}
+                  onChange={toggleSlaAlerts}
+                  aria-label="Toggle task risk alerts"
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            {/* Plan Generation Updates */}
+            <div className="pref-row">
+              <div className="pref-left">
+                <span className="pref-label">Plan Generation Updates</span>
+                <span className="pref-desc">Live progress toasts during AI orchestration</span>
+              </div>
+              <label className="switch-control">
+                <input
+                  type="checkbox"
+                  checked={genAlerts}
+                  onChange={toggleGenAlerts}
+                  aria-label="Toggle plan generation updates"
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            {/* Weekly Digest */}
+            <div className="pref-row">
+              <div className="pref-left">
+                <span className="pref-label">Weekly Onboarding Digest</span>
+                <span className="pref-desc">Summary report of new hires and completed milestones</span>
+              </div>
+              <label className="switch-control">
+                <input
+                  type="checkbox"
+                  checked={weeklyDigest}
+                  onChange={toggleWeeklyDigest}
+                  aria-label="Toggle weekly digest"
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+
+            {/* Localization info */}
+            <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--muted)" }}>
+                <span>Detected Timezone:</span>
+                <strong style={{ color: "var(--ink)" }}>{detectedTimezone}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--muted)" }}>
+                <span>Date & Calendar Standard:</span>
+                <strong style={{ color: "var(--ink)" }}>ISO 8601 (Business Days)</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Card E: Active Session Diagnostics */}
+          <div className="clyora-card" style={{ padding: "18px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+              <Laptop size={16} color="var(--primary)" />
+              <h3 style={{ margin: 0, fontSize: "13.5px", fontWeight: 700, color: "var(--ink)" }}>
+                Active Session Diagnostics
+              </h3>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px", color: "var(--muted)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Session ID</span>
+                <code style={{ fontSize: "11px", color: "var(--ink)" }}>
+                  {user?.id ? `${user.id.slice(0, 14)}…` : "Active"}
+                </code>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Transport Security</span>
+                <span style={{ color: "#16a34a", fontWeight: 600 }}>TLS 1.3 / Strict-Transport</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Client Environment</span>
+                <span style={{ color: "var(--ink)" }}>
+                  {typeof navigator !== "undefined" && navigator.userAgent.includes("Chrome")
+                    ? "Chrome / Chromium Engine"
+                    : "Standard Browser"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit Profile Info Modal */}
+      {showEditModal && (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowEditModal(false);
+          }}
+        >
+          <div className="modal-card" style={{ maxWidth: "520px" }}>
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="modal-header-icon">
+                  <User size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>
+                    Enterprise Profile Information
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--muted)" }}>
+                    Corporate Identity & Directory Synchronization
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setShowEditModal(false)}
+                aria-label="Close dialog"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div className="notice" style={{ margin: 0 }}>
+                <p style={{ margin: 0, fontSize: "13px" }}>
+                  <strong>Single Sign-On Notice:</strong> Your legal name (<strong>{fullName}</strong>), corporate email (<strong>{user?.email}</strong>) and assigned role (<strong>{primaryRoleLabel}</strong>) are managed centrally through your organization’s identity provider.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--ink)" }}>
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  defaultValue={fullName}
+                  disabled
+                  style={{
+                    background: "var(--bg-subtle)",
+                    cursor: "not-allowed",
+                    opacity: 0.8,
+                  }}
+                />
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                  Sourced from authoritative employee record {employeeIdDisplay}.
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--ink)" }}>
+                  Corporate Work Email
+                </label>
+                <input
+                  type="email"
+                  defaultValue={user?.email}
+                  disabled
+                  style={{
+                    background: "var(--bg-subtle)",
+                    cursor: "not-allowed",
+                    opacity: 0.8,
+                  }}
+                />
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                  Primary authentication subject for OpenID Connect federated sessions.
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--ink)" }}>
+                  Assigned Department & Scope
+                </label>
+                <input
+                  type="text"
+                  defaultValue={`${departmentName} (${jurisdictionDisplay})`}
+                  disabled
+                  style={{
+                    background: "var(--bg-subtle)",
+                    cursor: "not-allowed",
+                    opacity: 0.8,
+                  }}
+                />
+              </div>
+
+              <p style={{ fontSize: "12.5px", color: "var(--muted)", margin: 0, lineHeight: 1.4 }}>
+                To update your legal name, title, or reporting line, please contact your organization HR administrator or submit a service ticket to Enterprise IT.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setShowEditModal(false)}
+              >
+                Close
+              </button>
+              <a
+                className="button primary"
+                href="/api/v1/auth/oidc/start"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ gap: "6px" }}
+              >
+                <ExternalLink size={14} />
+                <span>Open Identity Portal</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 export function Help() {

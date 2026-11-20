@@ -18,16 +18,20 @@ import {
   PanelLeftOpen,
   X,
   Sparkles,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { navigation, type Workspace } from "./navigation";
 import { useSession } from "./session";
+import { useTheme } from "./theme";
 import { api, can } from "../lib/api";
 import { ClyoraLogo } from "./ClyoraLogo";
 import { ChatWidget } from "./ChatWidget";
 
 export function Shell({ workspace }: { workspace: Workspace }) {
   const { user, signOut } = useSession();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
@@ -99,6 +103,19 @@ export function Shell({ workspace }: { workspace: Workspace }) {
           <kbd>↵</kbd>
         </form>
         <div className="header-actions">
+          <button
+            type="button"
+            className="icon-button theme-toggle-btn"
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={toggleTheme}
+          >
+            {theme === "dark" ? (
+              <Sun size={19} className="theme-toggle-icon" />
+            ) : (
+              <Moon size={19} className="theme-toggle-icon" />
+            )}
+          </button>
           <Link
             className="icon-button"
             aria-label="Help"

@@ -9,6 +9,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { SessionProvider, useSession, homeFor } from "./workspace/session";
+import { ThemeProvider } from "./workspace/theme";
 import { Shell } from "./workspace/Shell";
 import { Landing, Login, Signup, ForgotPassword } from "./workspace/Public";
 import { can } from "./lib/api";
@@ -109,7 +110,8 @@ function Start() {
 export function App() {
   return (
     <BrowserRouter>
-      <SessionProvider>
+      <ThemeProvider>
+        <SessionProvider>
         <Suspense
           fallback={
             <div className="loading" role="status">
@@ -247,7 +249,8 @@ export function App() {
             <Route path="*" element={<ErrorPage />} />
           </Routes>
         </Suspense>
-      </SessionProvider>
+        </SessionProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

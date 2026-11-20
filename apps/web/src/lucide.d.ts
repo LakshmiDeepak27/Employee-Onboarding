@@ -66,4 +66,20 @@ declare module 'lucide-react' {
   export const MicOff: LucideIcon;
   export const Volume2: LucideIcon;
   export const VolumeX: LucideIcon;
+  export const Sun: LucideIcon;
+  export const Moon: LucideIcon;
+  export const Mail: LucideIcon;
+  export const Globe: LucideIcon;
+  export const IdCard: LucideIcon;
+  export const Copy: LucideIcon;
+  export const Lock: LucideIcon;
+  export const KeyRound: LucideIcon;
+  export const ShieldAlert: LucideIcon;
+  export const ExternalLink: LucideIcon;
+  export const Edit3: LucideIcon;
+  export const Sliders: LucideIcon;
+  export const Filter: LucideIcon;
+  export const ChevronDown: LucideIcon;
+  export const ChevronUp: LucideIcon;
+  export const Info: LucideIcon;
 }
