@@ -1488,96 +1488,139 @@ export function TaskRows({
 
       {editingTask && (
         <div
+          className="modal-overlay"
           role="dialog"
           aria-modal="true"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: "20px",
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingTask(null);
           }}
         >
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: "12px",
-              maxWidth: "520px",
-              width: "100%",
-              padding: "24px",
-              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>Edit Onboarding Task</h3>
+          <div className="modal-card">
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="modal-header-icon" style={{ background: "#fef3c7", borderColor: "#fde68a", color: "#d97706" }}>
+                  <Pencil size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>
+                    Edit Onboarding Task
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--muted)" }}>
+                    Modify task instructions, owner role, deadline, or review state.
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
+                className="modal-close-btn"
                 onClick={() => setEditingTask(null)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+                aria-label="Close dialog"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
-
-            {editError && <p className="notice danger" style={{ marginBottom: "12px" }}>{editError}</p>}
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 saveEdit.mutate();
               }}
-              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+              style={{ margin: 0 }}
             >
-              <label className="form-field">
-                <span className="field-label">Task Title</span>
-                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required />
-              </label>
+              <div className="modal-body">
+                {editError && <p className="notice danger" style={{ margin: 0 }}>{editError}</p>}
 
-              <label className="form-field">
-                <span className="field-label">Description & Instructions</span>
-                <textarea rows={3} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
-              </label>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <label className="form-field">
-                  <span className="field-label">Owner Role</span>
-                  <select value={editOwnerRole} onChange={(e) => setEditOwnerRole(e.target.value as any)}>
-                    <option value="HR">HR Administrator</option>
-                    <option value="MANAGER">People Manager</option>
-                    <option value="IT">IT Operations</option>
-                    <option value="EMPLOYEE">New Employee</option>
-                  </select>
+                <label className="clyora-form-label">
+                  <span className="clyora-label-text">
+                    <span>Task Title <span style={{ color: "#ef4444" }}>*</span></span>
+                  </span>
+                  <input
+                    className="clyora-input"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    required
+                  />
                 </label>
 
-                <label className="form-field">
-                  <span className="field-label">Due Date</span>
-                  <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                <label className="clyora-form-label">
+                  <span className="clyora-label-text">Description & Instructions</span>
+                  <textarea
+                    className="clyora-textarea"
+                    rows={2}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                  />
                 </label>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <label className="clyora-form-label">
+                    <span className="clyora-label-text">Owner Role</span>
+                    <select
+                      className="clyora-select"
+                      value={editOwnerRole}
+                      onChange={(e) => setEditOwnerRole(e.target.value as any)}
+                    >
+                      <option value="HR">HR Administrator</option>
+                      <option value="MANAGER">People Manager</option>
+                      <option value="IT">IT Operations</option>
+                      <option value="EMPLOYEE">New Employee</option>
+                      <option value="FINANCE">Finance & Accounts</option>
+                      <option value="LND">Learning & Dev (L&D)</option>
+                      <option value="COMPLIANCE">Legal & Compliance</option>
+                    </select>
+                  </label>
+
+                  <label className="clyora-form-label">
+                    <span className="clyora-label-text">Target Due Date</span>
+                    <input
+                      type="date"
+                      className="clyora-input"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "12px" }}>
+                  <label className="clyora-form-label">
+                    <span className="clyora-label-text">Review Decision</span>
+                    <select
+                      className="clyora-select"
+                      value={editReviewState}
+                      onChange={(e) => setEditReviewState(e.target.value as any)}
+                    >
+                      <option value="OK">Reviewed (OK)</option>
+                      <option value="NEEDS_REVIEW">Needs Review</option>
+                    </select>
+                  </label>
+
+                  <label className="clyora-form-label">
+                    <span className="clyora-label-text">Modification Reason</span>
+                    <input
+                      className="clyora-input"
+                      placeholder="e.g. Adjusted due date per HR schedule"
+                      value={editReason}
+                      onChange={(e) => setEditReason(e.target.value)}
+                    />
+                  </label>
+                </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <label className="form-field">
-                  <span className="field-label">Review Decision</span>
-                  <select value={editReviewState} onChange={(e) => setEditReviewState(e.target.value as any)}>
-                    <option value="OK">Reviewed (OK)</option>
-                    <option value="NEEDS_REVIEW">Needs Review</option>
-                  </select>
-                </label>
-
-                <label className="form-field">
-                  <span className="field-label">Modification Note</span>
-                  <input placeholder="Reason for change" value={editReason} onChange={(e) => setEditReason(e.target.value)} />
-                </label>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" }}>
-                <button type="button" className="button secondary" onClick={() => setEditingTask(null)}>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="button secondary"
+                  style={{ padding: "8px 16px", fontSize: "13px" }}
+                  onClick={() => setEditingTask(null)}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="button primary" disabled={saveEdit.isPending}>
+                <button
+                  type="submit"
+                  className="button primary"
+                  style={{ padding: "8px 18px", fontSize: "13px" }}
+                  disabled={saveEdit.isPending}
+                >
                   {saveEdit.isPending ? "Saving changes…" : "Save Changes"}
                 </button>
               </div>
@@ -1712,7 +1755,51 @@ export function PlanDetails() {
   const [newService, setNewService] = useState<any>("DOCUMENTS");
   const [newOwnerRole, setNewOwnerRole] = useState<any>("HR");
   const [newDueDate, setNewDueDate] = useState("");
+  const [newAuthorityClass, setNewAuthorityClass] = useState<"ROUTINE" | "PAY_AFFECTING" | "LEGAL">("ROUTINE");
   const [addTaskError, setAddTaskError] = useState("");
+
+  const presets = [
+    {
+      label: "🪪 Access Badge",
+      title: "Complete Security Badge Request & Photo Upload",
+      description: "Submit photograph and facility registration for physical office badge access.",
+      service: "DOCUMENTS",
+      ownerRole: "EMPLOYEE",
+      authorityClass: "ROUTINE" as const,
+    },
+    {
+      label: "📝 Physical NDA",
+      title: "Sign Physical Confidentiality & IP Assignment Deed",
+      description: "Execute bilateral wet-ink copy of the intellectual property assignment and confidentiality deed.",
+      service: "DOCUMENTS",
+      ownerRole: "HR",
+      authorityClass: "LEGAL" as const,
+    },
+    {
+      label: "💻 Dev Sandbox",
+      title: "Generate AWS / Cloud Sandbox Keys & SSH Certificates",
+      description: "Provision developer sandbox credentials, multi-factor hardware security key, and SSH jump-box profile.",
+      service: "EQUIPMENT",
+      ownerRole: "IT",
+      authorityClass: "ROUTINE" as const,
+    },
+    {
+      label: "👥 Executive 1:1",
+      title: "Schedule 30-Minute Executive Welcome & Orientation",
+      description: "Book initial introductory 1:1 discovery meeting with Vice President / Engineering Director.",
+      service: "MANAGER",
+      ownerRole: "MANAGER",
+      authorityClass: "ROUTINE" as const,
+    },
+    {
+      label: "💳 Corporate Card",
+      title: "Submit Corporate Expense Card Application",
+      description: "Complete corporate credit card application and link flight/hotel booking profile.",
+      service: "PAYROLL",
+      ownerRole: "FINANCE",
+      authorityClass: "ROUTINE" as const,
+    },
+  ];
 
   const addTaskMutation = useMutation({
     mutationFn: async () => {
@@ -1724,13 +1811,14 @@ export function PlanDetails() {
         service: newService,
         ownerRole: newOwnerRole,
         dueDate: newDueDate,
-        authorityClass: "ROUTINE",
+        authorityClass: newAuthorityClass,
       });
     },
     onSuccess: () => {
       setShowAddTask(false);
       setNewTitle("");
       setNewDescription("");
+      setNewAuthorityClass("ROUTINE");
       setAddTaskError("");
       void cache.invalidateQueries();
     },
@@ -2114,108 +2202,214 @@ export function PlanDetails() {
 
             {showAddTask && (
               <div
+                className="modal-overlay"
                 role="dialog"
                 aria-modal="true"
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  background: "rgba(15, 23, 42, 0.6)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 9999,
-                  padding: "20px",
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setShowAddTask(false);
                 }}
               >
-                <div
-                  style={{
-                    background: "#ffffff",
-                    borderRadius: "12px",
-                    maxWidth: "520px",
-                    width: "100%",
-                    padding: "24px",
-                    boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                    <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>Add Custom Onboarding Task</h3>
+                <div className="modal-card">
+                  {/* Header */}
+                  <div className="modal-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div className="modal-header-icon">
+                        <Plus size={20} />
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>
+                          Add Custom Onboarding Task
+                        </h3>
+                        <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--muted)" }}>
+                          Attach an organization-specific milestone or requirement to this journey.
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
+                      className="modal-close-btn"
                       onClick={() => setShowAddTask(false)}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+                      aria-label="Close dialog"
                     >
-                      <X size={18} />
+                      <X size={16} />
                     </button>
                   </div>
-
-                  {addTaskError && <p className="notice danger" style={{ marginBottom: "12px" }}>{addTaskError}</p>}
 
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
                       addTaskMutation.mutate();
                     }}
-                    style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+                    style={{ margin: 0 }}
                   >
-                    <label className="form-field">
-                      <span className="field-label">Task Title</span>
-                      <input
-                        placeholder="e.g. Complete Security Badge Request & Photo Upload"
-                        value={newTitle}
-                        onChange={(e) => setNewTitle(e.target.value)}
-                        required
-                      />
-                    </label>
+                    <div className="modal-body">
+                      {addTaskError && <p className="notice danger" style={{ margin: 0 }}>{addTaskError}</p>}
 
-                    <label className="form-field">
-                      <span className="field-label">Description & Instructions</span>
-                      <textarea
-                        rows={3}
-                        placeholder="Detailed instructions or prerequisites for the assignee..."
-                        value={newDescription}
-                        onChange={(e) => setNewDescription(e.target.value)}
-                      />
-                    </label>
+                      {/* Quick Presets */}
+                      <div className="modal-presets-container">
+                        <div className="modal-presets-label">
+                          <Sparkles size={12} color="#2563eb" />
+                          <span>Quick Templates (1-Click Fill)</span>
+                        </div>
+                        <div className="modal-presets-row">
+                          {presets.map((preset) => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              className="modal-preset-pill"
+                              onClick={() => {
+                                setNewTitle(preset.title);
+                                setNewDescription(preset.description);
+                                setNewService(preset.service);
+                                setNewOwnerRole(preset.ownerRole);
+                                setNewAuthorityClass(preset.authorityClass);
+                              }}
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      <label className="form-field">
-                        <span className="field-label">Service Area</span>
-                        <select value={newService} onChange={(e) => setNewService(e.target.value as any)}>
-                          <option value="DOCUMENTS">Documents & Compliance</option>
-                          <option value="EQUIPMENT">Equipment & IT Provisioning</option>
-                          <option value="PAYROLL">Payroll & Compensation</option>
-                          <option value="BENEFITS">Benefits & Health Insurance</option>
-                          <option value="TRAINING">Training & Certifications</option>
-                          <option value="MANAGER">Manager Setup & Welcome</option>
-                        </select>
+                      {/* Task Title */}
+                      <label className="clyora-form-label">
+                        <span className="clyora-label-text">
+                          <span>Task Title <span style={{ color: "#ef4444" }}>*</span></span>
+                        </span>
+                        <input
+                          className="clyora-input"
+                          placeholder="e.g. Complete Security Badge Request & Photo Upload"
+                          value={newTitle}
+                          onChange={(e) => setNewTitle(e.target.value)}
+                          required
+                          autoFocus
+                        />
                       </label>
 
-                      <label className="form-field">
-                        <span className="field-label">Owner Role</span>
-                        <select value={newOwnerRole} onChange={(e) => setNewOwnerRole(e.target.value as any)}>
-                          <option value="HR">HR Administrator</option>
-                          <option value="MANAGER">People Manager</option>
-                          <option value="IT">IT Operations</option>
-                          <option value="EMPLOYEE">New Employee</option>
-                        </select>
+                      {/* Description */}
+                      <label className="clyora-form-label">
+                        <span className="clyora-label-text">
+                          <span>Description & Instructions</span>
+                          <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 400 }}>Optional</span>
+                        </span>
+                        <textarea
+                          className="clyora-textarea"
+                          rows={2}
+                          placeholder="Provide clear step-by-step guidance or prerequisites for the assignee..."
+                          value={newDescription}
+                          onChange={(e) => setNewDescription(e.target.value)}
+                        />
                       </label>
+
+                      {/* Two Columns: Service Area & Owner Role */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <label className="clyora-form-label">
+                          <span className="clyora-label-text">Service Area</span>
+                          <select
+                            className="clyora-select"
+                            value={newService}
+                            onChange={(e) => setNewService(e.target.value as any)}
+                          >
+                            <option value="DOCUMENTS">📄 Documents & Compliance</option>
+                            <option value="EQUIPMENT">💻 Equipment & IT</option>
+                            <option value="PAYROLL">💰 Payroll & Compensation</option>
+                            <option value="BENEFITS">🏥 Benefits & Medical</option>
+                            <option value="TRAINING">🎓 Training & Certifications</option>
+                            <option value="MANAGER">👥 Manager Setup</option>
+                          </select>
+                        </label>
+
+                        <label className="clyora-form-label">
+                          <span className="clyora-label-text">Owner Role</span>
+                          <select
+                            className="clyora-select"
+                            value={newOwnerRole}
+                            onChange={(e) => setNewOwnerRole(e.target.value as any)}
+                          >
+                            <option value="HR">HR Administrator</option>
+                            <option value="MANAGER">People Manager</option>
+                            <option value="IT">IT Operations</option>
+                            <option value="EMPLOYEE">New Employee</option>
+                            <option value="FINANCE">Finance & Accounts</option>
+                            <option value="LND">Learning & Dev (L&D)</option>
+                            <option value="COMPLIANCE">Legal & Compliance</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      {/* Due Date & Authority Class */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "12px" }}>
+                        <label className="clyora-form-label">
+                          <span className="clyora-label-text">
+                            <span>Target Due Date <span style={{ color: "#ef4444" }}>*</span></span>
+                          </span>
+                          <input
+                            type="date"
+                            className="clyora-input"
+                            value={newDueDate}
+                            onChange={(e) => setNewDueDate(e.target.value)}
+                            required
+                          />
+                        </label>
+
+                        <div className="clyora-form-label">
+                          <span className="clyora-label-text">Verification Class</span>
+                          <div className="authority-selector">
+                            <button
+                              type="button"
+                              className={`authority-option ${newAuthorityClass === "ROUTINE" ? "active" : ""}`}
+                              onClick={() => setNewAuthorityClass("ROUTINE")}
+                            >
+                              <span className="authority-option-title">
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
+                                Routine
+                              </span>
+                              <span className="authority-option-desc">Operational</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`authority-option ${newAuthorityClass === "PAY_AFFECTING" ? "active" : ""}`}
+                              onClick={() => setNewAuthorityClass("PAY_AFFECTING")}
+                            >
+                              <span className="authority-option-title">
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
+                                Payroll
+                              </span>
+                              <span className="authority-option-desc">Compensation</span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`authority-option ${newAuthorityClass === "LEGAL" ? "active" : ""}`}
+                              onClick={() => setNewAuthorityClass("LEGAL")}
+                            >
+                              <span className="authority-option-title">
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444" }} />
+                                Legal
+                              </span>
+                              <span className="authority-option-desc">Sign-off</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <label className="form-field">
-                      <span className="field-label">Due Date</span>
-                      <input
-                        type="date"
-                        value={newDueDate}
-                        onChange={(e) => setNewDueDate(e.target.value)}
-                        required
-                      />
-                    </label>
-
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" }}>
-                      <button type="button" className="button secondary" onClick={() => setShowAddTask(false)}>
+                    {/* Footer */}
+                    <div className="modal-footer">
+                      <button
+                        type="button"
+                        className="button secondary"
+                        style={{ padding: "8px 16px", fontSize: "13px" }}
+                        onClick={() => setShowAddTask(false)}
+                      >
                         Cancel
                       </button>
-                      <button type="submit" className="button primary" disabled={addTaskMutation.isPending}>
+                      <button
+                        type="submit"
+                        className="button primary"
+                        style={{ padding: "8px 18px", fontSize: "13px", gap: "6px" }}
+                        disabled={addTaskMutation.isPending}
+                      >
+                        <Plus size={15} />
                         {addTaskMutation.isPending ? "Adding task…" : "Create Task"}
                       </button>
                     </div>
