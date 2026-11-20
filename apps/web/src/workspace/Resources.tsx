@@ -93,6 +93,7 @@ const configs: Record<
 };
 export function ServicePage({ service }: { service: Service }) {
   const { user } = useSession();
+  const isManager = workspaceFor(user!) === "manager";
   const cfg = configs[service];
   const cache = useQueryClient();
   const q = useQuery({
@@ -236,6 +237,25 @@ export function ServicePage({ service }: { service: Service }) {
   return (
     <>
       <Heading title={cfg.title} description={cfg.description} />
+      {service === "manager" && !isManager && (
+        <div
+          className="notice"
+          style={{
+            marginBottom: "16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "#eff6ff",
+            borderColor: "#bfdbfe",
+            color: "#1e40af",
+          }}
+        >
+          <ShieldCheck size={18} color="#2563eb" />
+          <span>
+            <strong>Hiring Manager Ownership:</strong> First-day agendas, buddy assignments, and team introductions are owned and completed by the new hire’s direct People Manager (e.g. David Chen). This view is read-only for HR oversight.
+          </span>
+        </div>
+      )}
       <Feedback
         error={action.error}
         success={
@@ -306,7 +326,7 @@ export function ServicePage({ service }: { service: Service }) {
                         {row.kind === "BUDDY_ASSIGNMENT" && (
                           <label className="form-field" style={{ marginTop: 12 }}>
                             <span className="field-label">Onboarding buddy or contact</span>
-                            <select aria-label={`Onboarding buddy for ${row.employeeName ?? "employee"}`} value={managerDraft(row).buddyEmployeeId} disabled={!!row.completedAt || action.isPending || team.isLoading || team.isError} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), buddyEmployeeId: e.target.value } }))}>
+                            <select aria-label={`Onboarding buddy for ${row.employeeName ?? "employee"}`} value={managerDraft(row).buddyEmployeeId} disabled={!isManager || !!row.completedAt || action.isPending || team.isLoading || team.isError} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), buddyEmployeeId: e.target.value } }))}>
                               {team.isLoading && <option value="">Loading team…</option>}
                               <option value="">Choose a team member</option>
                               {(team.data?.items ?? []).filter((person) => person.id !== row.employeeId && person.status === "ACTIVE").map((person) => <option value={person.id} key={person.id}>{person.firstName} {person.lastName}{person.id === user?.employeeId ? " (you)" : ""}</option>)}
@@ -320,7 +340,7 @@ export function ServicePage({ service }: { service: Service }) {
                           <label className="form-field" style={{ marginTop: 12 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                               <span className="field-label">Agenda items</span>
-                              {!row.completedAt && (
+                              {!row.completedAt && isManager && (
                                 <button
                                   type="button"
                                   className="button secondary small"
@@ -337,7 +357,7 @@ export function ServicePage({ service }: { service: Service }) {
                                 </button>
                               )}
                             </div>
-                            <textarea rows={3} placeholder={"09:00 | Welcome and introductions\n10:00 | Team setup"} value={managerDraft(row).agendaText} disabled={!!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), agendaText: e.target.value } }))} />
+                            <textarea rows={3} placeholder={"09:00 | Welcome and introductions\n10:00 | Team setup"} value={managerDraft(row).agendaText} disabled={!isManager || !!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), agendaText: e.target.value } }))} />
                             <small className="field-hint">One item per line (e.g. 09:30 | Welcome or 10:00 - Setup).</small>
                           </label>
                         )}
@@ -345,7 +365,7 @@ export function ServicePage({ service }: { service: Service }) {
                           <label className="form-field" style={{ marginTop: 12 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                               <span className="field-label">Completion notes</span>
-                              {!row.completedAt && row.kind === "PROBATION_GOALS" && (
+                              {!row.completedAt && isManager && row.kind === "PROBATION_GOALS" && (
                                 <button
                                   type="button"
                                   className="button secondary small"
@@ -362,7 +382,7 @@ export function ServicePage({ service }: { service: Service }) {
                                 </button>
                               )}
                             </div>
-                            <textarea rows={3} value={managerDraft(row).notes} disabled={!!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), notes: e.target.value } }))} placeholder="Record the access review or agreed goals." />
+                            <textarea rows={3} value={managerDraft(row).notes} disabled={!isManager || !!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), notes: e.target.value } }))} placeholder="Record the access review or agreed goals." />
                           </label>
                         )}
                         {!!row.blockedBy?.length && <p className="notice warning">Waiting for: {row.blockedBy.join(", ")}</p>}
@@ -462,8 +482,9 @@ export function ServicePage({ service }: { service: Service }) {
                           </button>
                         )}
                     {service === "manager" &&
+                      isManager &&
                       can(user, "managertask.write") &&
-                      !row.completedAt && row.taskStatus !== "COMPLETED" && row.taskStatus !== "SKIPPED" && (
+                      !row.completedAt && row.taskStatus !== "COMPLETED" && row.taskStatus !== "SKIPPED" ? (
                         <div className="form-vertical" style={{ gap: 8 }}>
                           <button className="button secondary small" disabled={action.isPending || !!row.blockedBy?.length} onClick={() => submitManagerTask(row, false)}>
                             {action.isPending && action.variables?.row.id === row.id ? "Saving…" : "Save details"}
@@ -472,7 +493,11 @@ export function ServicePage({ service }: { service: Service }) {
                             {action.isPending && action.variables?.row.id === row.id ? "Completing…" : "Save & complete"}
                           </button>
                         </div>
-                      )}
+                      ) : service === "manager" && !row.completedAt && row.taskStatus !== "COMPLETED" && row.taskStatus !== "SKIPPED" ? (
+                        <span className="muted" style={{ fontSize: "12px", fontStyle: "italic" }}>
+                          Awaiting Manager
+                        </span>
+                      ) : null}
                     {service === "benefits" &&
                       can(user, "benefit.enrol") &&
                       ["WINDOW_OPEN"].includes(row.status ?? "") && (

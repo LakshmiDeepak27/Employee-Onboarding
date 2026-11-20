@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Pencil,
   X,
+  AlertCircle,
 } from "lucide-react";
 import {
   CreateEmployeeRequestSchema,
@@ -1846,6 +1847,24 @@ export function PlanDetails() {
               </div>
             </div>
 
+            {p.status === "DRAFT" && (
+              <div
+                className="notice warning"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  marginBottom: "16px",
+                }}
+              >
+                <AlertCircle size={18} color="#d97706" />
+                <span style={{ fontSize: "13.5px" }}>
+                  <strong>Plan in Draft / Revision:</strong> This plan has not been dispatched yet. You can customize task titles and due dates, reassign owners, or click <strong>➕ Add Custom Task</strong> before approving & dispatching.
+                </span>
+              </div>
+            )}
             {p.refusalReason && (
               <p className="notice danger">{p.refusalReason}</p>
             )}

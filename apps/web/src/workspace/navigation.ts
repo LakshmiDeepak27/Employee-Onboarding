@@ -123,14 +123,6 @@ export const navigation: Record<Workspace, NavigationItem[]> = {
       "benefit.read",
     ),
     item(
-      "manager-tasks",
-      "Manager setup",
-      "Coordinate manager responsibilities.",
-      ListChecks,
-      "Resources",
-      "managertask.read",
-    ),
-    item(
       "policies",
       "Policies & knowledge",
       "Explore the sources behind your onboarding plans.",
