@@ -23,6 +23,7 @@ import {
   Pencil,
   X,
   AlertCircle,
+  Workflow,
 } from "lucide-react";
 import {
   CreateEmployeeRequestSchema,
@@ -819,7 +820,11 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
   const navigate = useNavigate();
   const w = workspaceFor(user!);
   const generate = useMutation({
-    mutationFn: () => api.plans.generate(id!, { forceBaseline: baseline }),
+    mutationFn: () =>
+      api.plans.generate(id!, {
+        forceBaseline: baseline,
+        regenerate: !!(q.data?.activePlanId || q.data?.latestPlanId),
+      }),
     onSuccess: (r) => setJob(r.jobId),
   });
   const invite = useMutation({
@@ -1056,42 +1061,66 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
                   )}
                   {can(user, "plan.generate") && (
                     <div className="generate-plan-section">
-                      <h4 className="section-title">
-                        {e.activePlanId ? "Regenerate onboarding plan" : "Generate onboarding plan"}
-                      </h4>
-                      <p style={{ margin: "2px 0 8px", color: "var(--muted)", fontSize: "13px" }}>
-                        Synthesizes role-based tasks, compliance dependencies, and jurisdiction statutory rules.
-                      </p>
-                      <label className="checkbox-label" style={{ margin: "6px 0 12px" }}>
-                        <input
-                          type="checkbox"
-                          checked={baseline}
-                          onChange={(e) => setBaseline(e.target.checked)}
-                        />
-                        <span>Use policy templates only (skip AI)</span>
-                      </label>
-                      <button
-                        className={`button ${e.activePlanId ? "secondary" : "primary"}`}
-                        disabled={generate.isPending || planJobActive}
-                        onClick={() => generate.mutate()}
-                        style={{ alignSelf: "flex-start" }}
-                      >
-                        {generate.isPending
-                          ? "Starting…"
-                          : planJobActive
-                            ? "Generating plan…"
-                            : state.data?.status === "FAILED"
-                              ? "Try plan generation again"
-                              : "Generate onboarding plan"}
-                      </button>
-                      <Feedback error={generate.error} />
+                      {e.latestPlanStatus === "IN_PROGRESS" || e.latestPlanStatus === "COMPLETED" ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                          <span style={{ fontSize: "13px", color: "var(--muted)" }}>
+                            Onboarding plan is actively in progress. Workflows have been dispatched across departments.
+                          </span>
+                          <Link
+                            className="button primary"
+                            to={`/${w}/plans/${e.activePlanId}`}
+                            style={{ alignSelf: "flex-start", gap: "6px" }}
+                          >
+                            <Workflow size={15} /> View Active Onboarding Plan
+                          </Link>
+                        </div>
+                      ) : (
+                        <>
+                          <h4 className="section-title">
+                            {e.activePlanId ? "Regenerate onboarding plan" : "Generate onboarding plan"}
+                          </h4>
+                          <p style={{ margin: "2px 0 8px", color: "var(--muted)", fontSize: "13px" }}>
+                            Synthesizes role-based tasks, compliance dependencies, and jurisdiction statutory rules.
+                          </p>
+                          <label className="checkbox-label" style={{ margin: "6px 0 12px" }}>
+                            <input
+                              type="checkbox"
+                              checked={baseline}
+                              onChange={(e) => setBaseline(e.target.checked)}
+                            />
+                            <span>Use policy templates only (skip AI)</span>
+                          </label>
+                          <button
+                            className={`button ${e.activePlanId ? "secondary" : "primary"}`}
+                            disabled={generate.isPending || planJobActive}
+                            onClick={() => generate.mutate()}
+                            style={{ alignSelf: "flex-start" }}
+                          >
+                            {generate.isPending
+                              ? "Starting…"
+                              : planJobActive
+                                ? "Generating plan…"
+                                : state.data?.status === "FAILED"
+                                  ? "Try plan generation again"
+                                  : e.activePlanId
+                                    ? "Regenerate onboarding plan"
+                                    : "Generate onboarding plan"}
+                          </button>
+                          <Feedback error={generate.error} />
+                        </>
+                      )}
                     </div>
                   )}
                   {job && (
-                    <div className="notice" style={{ marginTop: "14px" }}>
+                    <div className={`notice ${state.data?.status === "FAILED" ? "danger" : ""}`} style={{ marginTop: "14px" }}>
                       <QueryState query={state}>
                         <strong>{human(state.data?.status)}</strong>
-                        <p>{state.data?.error ?? human(state.data?.stage)}</p>
+                        <p style={{ margin: "4px 0" }}>{state.data?.error ?? human(state.data?.stage)}</p>
+                        {state.data?.status === "FAILED" && (
+                          <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#b91c1c" }}>
+                            Tip: You can check <strong>"Use policy templates only (skip AI)"</strong> above to generate the statutory plan instantly without waiting for external AI.
+                          </p>
+                        )}
                         <progress
                           max={100}
                           value={state.data?.progressPercent ?? 0}

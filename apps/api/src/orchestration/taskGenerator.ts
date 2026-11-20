@@ -85,19 +85,7 @@ export function generatePlanTasks(
   proposedTasks: ProposedLlmTaskInput[] = [],
   generationMode: "LLM_GROUNDED" | "BASELINE_FALLBACK" = "BASELINE_FALLBACK",
 ): TaskGenerationResult {
-  // Defense in depth: the current onboarding workflow only creates work owned
-  // by HR or the reporting Manager, even if an AI provider returns other roles.
-  const eligibleOwnerRules = mandatoryRules.filter(
-    (rule) => rule.ownerRole === "HR" || rule.ownerRole === "MANAGER",
-  );
-  const eligibleTaskTypes = new Set(eligibleOwnerRules.map((rule) => rule.taskType));
-  const eligibleRules = eligibleOwnerRules.map((rule) => ({
-    ...rule,
-    // A scoped plan cannot depend on work intentionally omitted from it.
-    dependsOnTypes: rule.dependsOnTypes.filter((taskType) =>
-      eligibleTaskTypes.has(taskType),
-    ),
-  }));
+  const eligibleRules = mandatoryRules;
   const calendarConfig: CalendarConfig = {
     businessDays: profile.businessDays,
     timezone: profile.timezone,

@@ -327,6 +327,10 @@ export class OnboardingOrchestrator {
               });
             }
 
+            const userExists = options.actorUserId
+              ? await tx.user.findUnique({ where: { id: options.actorUserId } }).catch(() => null)
+              : null;
+
             const plan = await tx.onboardingPlan.create({
               data: {
                 id: finalPlanId,
@@ -339,7 +343,7 @@ export class OnboardingOrchestrator {
                   generationMode === "LLM_GROUNDED" ? configuredModel() : null,
                 promptVersion:
                   generationMode === "LLM_GROUNDED" ? "plan-proposal@v4" : null,
-                createdById: options.actorUserId ?? null,
+                createdById: userExists ? options.actorUserId : null,
               },
             });
 

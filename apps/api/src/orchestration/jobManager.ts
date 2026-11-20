@@ -38,12 +38,15 @@ export class BackgroundJobManager {
           "Plan generation failed",
         );
         try {
+          const errorMessage =
+            error instanceof Error && error.message
+              ? error.message
+              : "Plan generation failed. Review the server log using the job ID, then retry.";
           await prisma.backgroundJob.update({
             where: { id: job.id },
             data: {
               status: "FAILED",
-              error:
-                "Plan generation failed. Review the server log using the job ID, then retry.",
+              error: errorMessage,
               finishedAt: new Date(),
             },
           });
