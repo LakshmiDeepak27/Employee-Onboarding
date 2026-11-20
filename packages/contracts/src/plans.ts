@@ -235,6 +235,7 @@ export const PlanRisksResponseSchema = z
 
 export const UpdatePlanTaskRequestSchema = z
   .object({
+    title: z.string().min(3).max(140).optional(),
     ownerRole: OwnerRoleEnum.optional(),
     assigneeUserId: Uuid.nullable().optional(),
     dueDate: IsoDate.optional(),
@@ -248,6 +249,19 @@ export const UpdatePlanTaskRequestSchema = z
     message: "at least one field is required",
   })
   .openapi("UpdatePlanTaskRequest");
+
+export const CreatePlanTaskRequestSchema = z
+  .object({
+    title: z.string().min(3).max(140),
+    description: z.string().max(2000).optional(),
+    service: ServiceAreaEnum,
+    ownerRole: OwnerRoleEnum,
+    dueDate: IsoDate,
+    authorityClass: AuthorityClassEnum.optional(),
+  })
+  .openapi("CreatePlanTaskRequest");
+
+export type CreatePlanTaskRequest = z.infer<typeof CreatePlanTaskRequestSchema>;
 // POST /api/v1/plans/{planId}/approval
 //
 // The ONLY path to dispatch. Refused (409 APPROVAL_BLOCKED) while any

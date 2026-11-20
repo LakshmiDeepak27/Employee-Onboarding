@@ -45,6 +45,7 @@ declare module 'lucide-react' {
   export const Network: LucideIcon;
   export const PanelLeftClose: LucideIcon;
   export const PanelLeftOpen: LucideIcon;
+  export const Pencil: LucideIcon;
   export const Plus: LucideIcon;
   export const RefreshCw: LucideIcon;
   export const Search: LucideIcon;

@@ -46,13 +46,12 @@ async function ensureDatabaseInitialized() {
 
   if (tablesExist) {
     try {
-      const asha = await prisma.user.findUnique({
-        where: { email: "asha.hr@clyora" },
-        select: { id: true },
+      const demoUsers = await prisma.user.count({
+        where: { email: { in: ["asha.hr@clyora", "priya.dev@clyora", "vikram.it@clyora"] } },
       });
 
-      if (!asha) {
-        logger.info("Demo user 'asha.hr@clyora' missing. Automatically seeding database...");
+      if (demoUsers < 3) {
+        logger.info("Demo users missing. Automatically seeding presentation users...");
         const tsxBin = require.resolve("tsx/cli");
         const seedPath = fs.existsSync(path.resolve(process.cwd(), "apps/api/prisma/seed.ts"))
           ? path.resolve(process.cwd(), "apps/api/prisma/seed.ts")

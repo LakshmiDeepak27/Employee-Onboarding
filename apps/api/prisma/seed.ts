@@ -193,6 +193,51 @@ async function seedCatalogs() {
 
   const courses = [
     {
+      code: 'IN-POSH-101',
+      title: 'Prevention of Sexual Harassment (POSH) Awareness',
+      provider: 'Internal Legal & Compliance',
+      durationMinutes: 45,
+      mandatoryForJurisdictions: ['IN-KA'],
+      mandatoryForRoles: [],
+      statutoryDeadlineDays: 14,
+    },
+    {
+      code: 'IN-LABOR-101',
+      title: 'Karnataka Workplace Compliance & Labor Standards',
+      provider: 'Internal Legal',
+      durationMinutes: 30,
+      mandatoryForJurisdictions: ['IN-KA'],
+      mandatoryForRoles: [],
+      statutoryDeadlineDays: 30,
+    },
+    {
+      code: 'ENG-SEC-201',
+      title: 'Secure Software Development & OWASP Top 10',
+      provider: 'Engineering Security Team',
+      durationMinutes: 60,
+      mandatoryForJurisdictions: [],
+      mandatoryForRoles: ['engineering'],
+      statutoryDeadlineDays: 14,
+    },
+    {
+      code: 'ENG-CI-202',
+      title: 'Enterprise Git, CI/CD & Deployment Standards',
+      provider: 'DevOps & Infrastructure',
+      durationMinutes: 45,
+      mandatoryForJurisdictions: [],
+      mandatoryForRoles: ['engineering'],
+      statutoryDeadlineDays: 7,
+    },
+    {
+      code: 'SALES-PLAYBOOK-101',
+      title: 'Enterprise Sales Methodology & CRM Compliance',
+      provider: 'Sales Enablement',
+      durationMinutes: 60,
+      mandatoryForJurisdictions: [],
+      mandatoryForRoles: ['sales'],
+      statutoryDeadlineDays: 14,
+    },
+    {
       code: 'OHS-ON-101',
       title: 'Ontario Occupational Health & Safety Awareness',
       provider: 'Internal',
@@ -247,7 +292,7 @@ async function resetPresentationWorkspace() {
     prisma.policyClause.deleteMany(),
     prisma.policyDocument.deleteMany(),
     prisma.user.deleteMany({
-      where: { email: { notIn: ['asha.hr@clyora', 'david.manager@clyora'] } },
+      where: { email: { notIn: ['asha.hr@clyora', 'david.manager@clyora', 'vikram.it@clyora', 'priya.dev@clyora'] } },
     }),
   ]);
 }
@@ -281,6 +326,8 @@ async function seedPresentationUsers() {
 
   const hrUser = await makeUser('asha.hr@clyora', 'hr_admin');
   const mgrUser = await makeUser('david.manager@clyora', 'manager');
+  const itUser = await makeUser('vikram.it@clyora', 'it_admin');
+  const empUser = await makeUser('priya.dev@clyora', 'employee');
 
   // Guarantee required department records exist using unique constraint on code
   await prisma.department.upsert({
@@ -293,9 +340,15 @@ async function seedPresentationUsers() {
     create: { code: 'HR', name: 'People Operations' },
     update: { name: 'People Operations' },
   });
+  await prisma.department.upsert({
+    where: { code: 'IT' },
+    create: { code: 'IT', name: 'Information Technology' },
+    update: { name: 'Information Technology' },
+  });
 
   const eng = await prisma.department.findUniqueOrThrow({ where: { code: 'ENG' } });
   const peopleOps = await prisma.department.findUniqueOrThrow({ where: { code: 'HR' } });
+  const itDept = await prisma.department.findUniqueOrThrow({ where: { code: 'IT' } });
 
   async function makeEmployee(input: {
     employeeNumber: string;
@@ -351,8 +404,7 @@ async function seedPresentationUsers() {
     });
   }
 
-  // HR staff are employees too. Linking Asha's profile keeps the people
-  // directory complete and allows HR to be selected as a reporting manager.
+  // 1. Asha Rao - HR Administrator (IN-KA)
   await makeEmployee({
     employeeNumber: 'EMP-0001',
     firstName: 'Asha',
@@ -369,16 +421,15 @@ async function seedPresentationUsers() {
     departmentId: peopleOps.id,
   });
 
-  // David needs an employee profile because manager permissions are scoped to
-  // direct reports.
-  await makeEmployee({
+  // 2. David Chen - Engineering Manager
+  const davidEmp = await makeEmployee({
     employeeNumber: 'EMP-0002',
     firstName: 'David',
     lastName: 'Chen',
     personalEmail: 'david@clyora.com',
     workEmail: 'david.manager@clyora',
     userId: mgrUser.id,
-    jurisdictionCode: 'CA-ON',
+    jurisdictionCode: 'IN-KA',
     employmentType: 'FULL_TIME',
     startInDays: -300,
     jobTitle: 'Engineering Manager',
@@ -386,13 +437,234 @@ async function seedPresentationUsers() {
     workMode: 'HYBRID',
   });
 
+  // 3. Vikram Malhotra - IT Systems Administrator (IN-KA)
+  await makeEmployee({
+    employeeNumber: 'EMP-0003',
+    firstName: 'Vikram',
+    lastName: 'Malhotra',
+    personalEmail: 'vikram.it@example.invalid',
+    workEmail: 'vikram.it@clyora',
+    userId: itUser.id,
+    jurisdictionCode: 'IN-KA',
+    employmentType: 'FULL_TIME',
+    startInDays: -200,
+    jobTitle: 'IT Systems Administrator',
+    roleFamily: 'engineering',
+    workMode: 'ONSITE',
+    departmentId: itDept.id,
+  });
+
+  // 4. Priya Sharma - New Hire Frontend Engineer (IN-KA, reports to David Chen)
+  const priyaEmp = await makeEmployee({
+    employeeNumber: 'EMP-0004',
+    firstName: 'Priya',
+    lastName: 'Sharma',
+    personalEmail: 'priya.sharma@example.invalid',
+    workEmail: 'priya.dev@clyora',
+    userId: empUser.id,
+    managerId: davidEmp.id,
+    jurisdictionCode: 'IN-KA',
+    employmentType: 'FULL_TIME',
+    startInDays: 3,
+    jobTitle: 'Frontend Software Engineer',
+    roleFamily: 'engineering',
+    workMode: 'HYBRID',
+    departmentId: eng.id,
+  });
+
+  // Seed an active onboarding plan for Priya Sharma if not exists
+  const existingPlan = await prisma.onboardingPlan.findFirst({
+    where: { employeeId: priyaEmp.id },
+  });
+
+  if (!existingPlan) {
+    const plan = await prisma.onboardingPlan.create({
+      data: {
+        employeeId: priyaEmp.id,
+        status: 'IN_PROGRESS',
+        generationMode: 'LLM_GROUNDED',
+        confidence: 0.96,
+        modelName: 'gemini-1.5-flash',
+        createdById: hrUser.id,
+        approvedById: hrUser.id,
+        approvedAt: new Date(),
+      },
+    });
+
+    const laptop = await prisma.equipmentCatalog.findFirst({ where: { category: 'laptop' } });
+    const poshCourse = await prisma.trainingCourse.findFirst({ where: { code: 'IN-POSH-101' } });
+    const secCourse = await prisma.trainingCourse.findFirst({ where: { code: 'ENG-SEC-201' } });
+    const medBenefit = await prisma.benefitPlan.findFirst({ where: { code: 'IN-MED-GRP' } });
+
+    // Task 1: ID Proof (Documents)
+    const t1 = await prisma.planTask.create({
+      data: {
+        planId: plan.id,
+        taskType: 'COLLECT_ID_PROOF',
+        service: 'DOCUMENTS',
+        title: 'Submit PAN & Aadhaar Identity Proof',
+        description: 'Mandatory identity and tax verification for Indian payroll onboarding.',
+        ownerRole: 'EMPLOYEE',
+        authorityClass: 'ROUTINE',
+        origin: 'POLICY_TEMPLATE',
+        status: 'NOT_STARTED',
+        dueDate: daysFromNow(2),
+        earliestStartDate: daysFromNow(0),
+        sortOrder: 1,
+      },
+    });
+    await prisma.documentRequest.create({
+      data: { taskId: t1.id, documentType: 'COLLECT_ID_PROOF', isRequired: true, status: 'REQUESTED' },
+    });
+
+    // Task 2: Laptop Provisioning (Equipment)
+    if (laptop) {
+      const t2 = await prisma.planTask.create({
+        data: {
+          planId: plan.id,
+          taskType: 'PROVISION_LAPTOP',
+          service: 'EQUIPMENT',
+          title: `Provision Developer Workstation (${laptop.name})`,
+          description: 'Deploy macOS developer laptop imaged with standard security profile and GitHub SSH keys.',
+          ownerRole: 'IT',
+          authorityClass: 'ROUTINE',
+          origin: 'POLICY_TEMPLATE',
+          status: 'NOT_STARTED',
+          dueDate: daysFromNow(2),
+          earliestStartDate: daysFromNow(0),
+          sortOrder: 2,
+        },
+      });
+      await prisma.equipmentAssignment.create({
+        data: { taskId: t2.id, catalogId: laptop.id, status: 'REQUESTED' },
+      });
+    }
+
+    // Task 3: POSH Training (Training)
+    if (poshCourse) {
+      const t3 = await prisma.planTask.create({
+        data: {
+          planId: plan.id,
+          taskType: 'MANDATORY_COMPLIANCE_TRAINING',
+          service: 'TRAINING',
+          title: 'Complete POSH Act Compliance Training',
+          description: 'Statutory compliance module required under the Prevention of Sexual Harassment at Workplace Act.',
+          ownerRole: 'EMPLOYEE',
+          authorityClass: 'LEGAL',
+          origin: 'POLICY_TEMPLATE',
+          status: 'NOT_STARTED',
+          dueDate: daysFromNow(14),
+          earliestStartDate: daysFromNow(0),
+          sortOrder: 3,
+        },
+      });
+      await prisma.trainingAssignment.create({
+        data: { taskId: t3.id, courseId: poshCourse.id, status: 'ASSIGNED', dueDate: daysFromNow(14) },
+      });
+    }
+
+    // Task 4: Secure Coding Training (Role-specific Training)
+    if (secCourse) {
+      const t4 = await prisma.planTask.create({
+        data: {
+          planId: plan.id,
+          taskType: 'ROLE_SPECIFIC_TRAINING',
+          service: 'TRAINING',
+          title: 'Complete Secure Coding & OWASP Standards',
+          description: 'Engineering role-specific training covering API security, dependency scanning, and secret management.',
+          ownerRole: 'EMPLOYEE',
+          authorityClass: 'ROUTINE',
+          origin: 'POLICY_TEMPLATE',
+          status: 'NOT_STARTED',
+          dueDate: daysFromNow(14),
+          earliestStartDate: daysFromNow(0),
+          sortOrder: 4,
+        },
+      });
+      await prisma.trainingAssignment.create({
+        data: { taskId: t4.id, courseId: secCourse.id, status: 'ASSIGNED', dueDate: daysFromNow(14) },
+      });
+    }
+
+    // Task 5: Benefits Election (Benefits)
+    if (medBenefit) {
+      const t5 = await prisma.planTask.create({
+        data: {
+          planId: plan.id,
+          taskType: 'BENEFITS_ELECTION',
+          service: 'BENEFITS',
+          title: 'Elect India Group Medical Health Cover',
+          description: 'Enroll in comprehensive employee medical insurance covering hospitalization and dependents.',
+          ownerRole: 'EMPLOYEE',
+          authorityClass: 'ROUTINE',
+          origin: 'POLICY_TEMPLATE',
+          status: 'NOT_STARTED',
+          dueDate: daysFromNow(30),
+          earliestStartDate: daysFromNow(0),
+          sortOrder: 5,
+        },
+      });
+      await prisma.benefitEnrollment.create({
+        data: {
+          taskId: t5.id,
+          benefitPlanId: medBenefit.id,
+          status: 'WINDOW_OPEN',
+          windowOpensOn: daysFromNow(0),
+          windowClosesOn: daysFromNow(30),
+        },
+      });
+    }
+
+    // Task 6: Assign Buddy (Manager)
+    const t6 = await prisma.planTask.create({
+      data: {
+        planId: plan.id,
+        taskType: 'ASSIGN_BUDDY',
+        service: 'MANAGER',
+        title: 'Assign Team Onboarding Buddy for Priya Sharma',
+        description: 'Pair Priya with a senior engineer from the frontend pod for Day 1 support and code reviews.',
+        ownerRole: 'MANAGER',
+        authorityClass: 'ROUTINE',
+        origin: 'POLICY_TEMPLATE',
+        status: 'NOT_STARTED',
+        dueDate: daysFromNow(1),
+        earliestStartDate: daysFromNow(0),
+        sortOrder: 6,
+      },
+    });
+    await prisma.managerTask.create({
+      data: { taskId: t6.id, kind: 'BUDDY_ASSIGNMENT' },
+    });
+
+    // Task 7: Day 1 Agenda (Manager)
+    const t7 = await prisma.planTask.create({
+      data: {
+        planId: plan.id,
+        taskType: 'PREPARE_DAY_ONE_AGENDA',
+        service: 'MANAGER',
+        title: 'Prepare Day 1 Agenda for Priya Sharma',
+        description: 'Schedule welcome meeting, tech stack walkthrough, and introductory 1-on-1.',
+        ownerRole: 'MANAGER',
+        authorityClass: 'ROUTINE',
+        origin: 'POLICY_TEMPLATE',
+        status: 'NOT_STARTED',
+        dueDate: daysFromNow(1),
+        earliestStartDate: daysFromNow(0),
+        sortOrder: 7,
+      },
+    });
+    await prisma.managerTask.create({
+      data: { taskId: t7.id, kind: 'DAY_ONE_AGENDA' },
+    });
+  }
+
   if (process.env.SEED_PRESENTATION_USERS === 'true') {
     const [userCount, employeeCount] = await Promise.all([
       prisma.user.count(),
       prisma.employee.count(),
     ]);
-    if (userCount !== 2 || employeeCount !== 2) {
-      throw new Error(`Presentation setup expected 2 staff accounts and their 2 linked employee profiles; found ${userCount} accounts and ${employeeCount} employee profiles.`);
+    if (userCount < 2 || employeeCount < 2) {
+      throw new Error(`Presentation setup expected staff accounts and linked employee profiles; found ${userCount} accounts and ${employeeCount} employee profiles.`);
     }
   }
 

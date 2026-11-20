@@ -5,6 +5,7 @@ import {
   ApprovePlanRequestSchema,
   FinalizeOnboardingRequestSchema,
   UpdatePlanTaskRequestSchema,
+  CreatePlanTaskRequestSchema,
   z,
 } from "@eo/contracts";
 import { authenticate, requireAuth } from "../middleware/authenticate.js";
@@ -520,6 +521,7 @@ plansRouter.patch(
         req.params.id!,
         req.params.taskId!,
         {
+          title: b.title,
           ownerRole: b.ownerRole,
           assigneeUserId: b.assigneeUserId,
           dueDate: b.dueDate,
@@ -532,6 +534,36 @@ plansRouter.patch(
       );
 
       res.json(presentTask(updated));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// POST /api/v1/plans/:id/tasks (HR Manual Task Creation)
+plansRouter.post(
+  "/:id/tasks",
+  requirePermission("task.update", {
+    target: (req) => employeeIdForPlan(req.params.id!),
+  }),
+  validate({ body: CreatePlanTaskRequestSchema }),
+  async (req, res, next) => {
+    try {
+      const actor = requireAuth(req);
+      const b = req.body as z.infer<typeof CreatePlanTaskRequestSchema>;
+      const created = await orchestrator.createTask(
+        req.params.id!,
+        {
+          title: b.title,
+          description: b.description,
+          service: b.service,
+          ownerRole: b.ownerRole,
+          dueDate: b.dueDate,
+          authorityClass: b.authorityClass,
+        },
+        { userId: actor.userId, role: actor.roles.join(",") },
+      );
+      res.status(201).json(presentTask(created));
     } catch (e) {
       next(e);
     }

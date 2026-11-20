@@ -2396,10 +2396,15 @@ table td > small {
   padding: 0 10px;
 }
 .auth-quick-login-grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 6px;
+}
+@media (max-width: 600px) {
+  .auth-quick-login-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .auth-quick-role-btn {
   display: flex;
@@ -2441,6 +2446,14 @@ table td > small {
 .auth-quick-role-btn.manager .auth-quick-role-badge {
   background: #f0fdf4;
   color: #15803d;
+}
+.auth-quick-role-btn.it .auth-quick-role-badge {
+  background: #fef3c7;
+  color: #b45309;
+}
+.auth-quick-role-btn.employee .auth-quick-role-badge {
+  background: #f3e8ff;
+  color: #7e22ce;
 }
 .auth-quick-role-name {
   font-size: 14px;

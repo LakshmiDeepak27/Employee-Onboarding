@@ -12,6 +12,7 @@ import {
   type ChatRequest,
   type ChatResponse,
   type CreateEmployeeRequest,
+  type CreatePlanTaskRequest,
   type CreatePolicyDocumentRequest,
   UpdateEmployeeRequestSchema,
   JobStateSchema,
@@ -303,6 +304,14 @@ export const api = {
     ) =>
       request<PlanTask>(`/plans/${planId}/tasks/${taskId}`, {
         method: "PATCH",
+        body: input,
+      }),
+    createTask: (
+      planId: string,
+      input: CreatePlanTaskRequest,
+    ) =>
+      request<PlanTask>(`/plans/${planId}/tasks`, {
+        method: "POST",
         body: input,
       }),
     pack: (id: string) => request<any>(`/plans/${id}/pack`),

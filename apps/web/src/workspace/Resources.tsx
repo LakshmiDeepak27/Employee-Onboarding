@@ -184,13 +184,15 @@ export function ServicePage({ service }: { service: Service }) {
     const needsAgenda = ["PREPARE_DAY_ONE_AGENDA", "SCHEDULE_INTRO_MEETINGS", "DAY_ONE_AGENDA", "INTRO_MEETINGS"].includes(row.kind ?? "");
     const agenda: { time: string; title: string }[] = [];
     if (needsAgenda) {
+      const defaultTimes = ["09:30", "11:00", "14:00", "16:00", "17:00"];
       for (const line of draft.agendaText.split("\n").map((value) => value.trim()).filter(Boolean)) {
-        const match = line.match(/^(\d{2}:\d{2})\s*\|\s*(.+)$/);
-        if (!match) {
-          setManagerError("Enter each agenda item as HH:MM | Description.");
-          return;
+        const match = line.match(/^(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)\s*[-|:]\s*(.+)$/);
+        if (match) {
+          agenda.push({ time: match[1]!, title: match[2]! });
+        } else {
+          const time = defaultTimes[agenda.length] ?? "10:00";
+          agenda.push({ time, title: line.replace(/^[-*•\d.]+\s*/, "") });
         }
-        agenda.push({ time: match[1]!, title: match[2]! });
       }
     }
     setManagerError("");
@@ -316,14 +318,50 @@ export function ServicePage({ service }: { service: Service }) {
                         )}
                         {["DAY_ONE_AGENDA", "INTRO_MEETINGS"].includes(row.kind ?? "") && (
                           <label className="form-field" style={{ marginTop: 12 }}>
-                            <span className="field-label">Agenda items</span>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                              <span className="field-label">Agenda items</span>
+                              {!row.completedAt && (
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  style={{ fontSize: "11px", padding: "2px 8px" }}
+                                  onClick={() => setManagerDrafts((d) => ({
+                                    ...d,
+                                    [row.taskId]: {
+                                      ...managerDraft(row),
+                                      agendaText: "09:30 | Welcome & team introduction\n11:00 | Workspace & development setup\n14:00 | Architecture & codebase walkthrough\n16:30 | Day-one wrap-up & check-in",
+                                    },
+                                  }))}
+                                >
+                                  ✨ Load Sample Agenda
+                                </button>
+                              )}
+                            </div>
                             <textarea rows={3} placeholder={"09:00 | Welcome and introductions\n10:00 | Team setup"} value={managerDraft(row).agendaText} disabled={!!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), agendaText: e.target.value } }))} />
-                            <small className="field-hint">One item per line, formatted as HH:MM | Description.</small>
+                            <small className="field-hint">One item per line (e.g. 09:30 | Welcome or 10:00 - Setup).</small>
                           </label>
                         )}
                         {["ACCESS_APPROVAL", "PROBATION_GOALS"].includes(row.kind ?? "") && (
                           <label className="form-field" style={{ marginTop: 12 }}>
-                            <span className="field-label">Completion notes</span>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                              <span className="field-label">Completion notes</span>
+                              {!row.completedAt && row.kind === "PROBATION_GOALS" && (
+                                <button
+                                  type="button"
+                                  className="button secondary small"
+                                  style={{ fontSize: "11px", padding: "2px 8px" }}
+                                  onClick={() => setManagerDrafts((d) => ({
+                                    ...d,
+                                    [row.taskId]: {
+                                      ...managerDraft(row),
+                                      notes: "1. Complete all statutory compliance & security training within 14 days.\n2. Complete first codebase commit & PR review by end of Week 2.\n3. Conduct 1-on-1 discovery meetings with cross-functional team leads by Day 30.",
+                                    },
+                                  }))}
+                                >
+                                  ✨ Load 30-Day Goals
+                                </button>
+                              )}
+                            </div>
                             <textarea rows={3} value={managerDraft(row).notes} disabled={!!row.completedAt || action.isPending} onChange={(e) => setManagerDrafts((d) => ({ ...d, [row.taskId]: { ...managerDraft(row), notes: e.target.value } }))} placeholder="Record the access review or agreed goals." />
                           </label>
                         )}

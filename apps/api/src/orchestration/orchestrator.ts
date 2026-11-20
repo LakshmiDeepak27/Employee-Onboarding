@@ -785,7 +785,23 @@ export class OnboardingOrchestrator {
           },
           orderBy: [{ code: "asc" }],
         });
-        const course = courses.find((item) => item.mandatoryForJurisdictions.includes(employee.jurisdictionCode) || item.mandatoryForRoles.includes(employee.roleFamily)) ?? courses.find((item) => item.mandatoryForJurisdictions.length === 0 && item.mandatoryForRoles.length === 0);
+
+        // Smart selection based on specific task type
+        let course = null;
+        if (task.taskType === "ROLE_SPECIFIC_TRAINING") {
+          course = courses.find((c) => c.mandatoryForRoles.includes(employee.roleFamily));
+        } else if (task.taskType === "HEALTH_AND_SAFETY_TRAINING") {
+          course = courses.find((c) => c.code.includes("OHS") || c.title.toLowerCase().includes("safety") || c.title.toLowerCase().includes("health"));
+        } else if (task.taskType === "DATA_PROTECTION_TRAINING") {
+          course = courses.find((c) => c.code.includes("SEC") || c.code.includes("DP") || c.title.toLowerCase().includes("security") || c.title.toLowerCase().includes("data"));
+        } else if (task.taskType === "MANDATORY_COMPLIANCE_TRAINING") {
+          course = courses.find((c) => c.mandatoryForJurisdictions.includes(employee.jurisdictionCode));
+        }
+
+        if (!course) {
+          course = courses.find((item) => item.mandatoryForJurisdictions.includes(employee.jurisdictionCode) || item.mandatoryForRoles.includes(employee.roleFamily)) ?? courses.find((item) => item.mandatoryForJurisdictions.length === 0 && item.mandatoryForRoles.length === 0);
+        }
+
         if (course) {
           await tx.trainingAssignment.upsert({
             where: { taskId: task.id },
@@ -986,6 +1002,7 @@ export class OnboardingOrchestrator {
     planId: string,
     taskId: string,
     updates: {
+      title?: string;
       status?: string;
       reviewState?: string;
       dueDate?: string;
@@ -1055,6 +1072,7 @@ export class OnboardingOrchestrator {
           const result = await tx.planTask.update({
             where: { id: taskId },
             data: {
+              ...(updates.title ? { title: updates.title } : {}),
               ...(updates.status ? { status: updates.status as any } : {}),
               ...(updates.reviewState
                 ? { reviewState: updates.reviewState as any }
@@ -1149,6 +1167,79 @@ export class OnboardingOrchestrator {
     }
 
     return updated;
+  }
+
+  async createTask(
+    planId: string,
+    input: {
+      title: string;
+      description?: string;
+      service: string;
+      ownerRole: string;
+      dueDate: string;
+      authorityClass?: string;
+    },
+    actor: { userId: string; role: string },
+  ) {
+    if (!isDatabaseOnline()) throw databaseUnavailableError();
+    const plan = await prisma.onboardingPlan.findUnique({
+      where: { id: planId },
+      include: { tasks: true },
+    });
+    if (!plan) throw notFound(`Plan with ID ${planId}`);
+    if (plan.status === "COMPLETED") throw conflict("Cannot add tasks to a completed plan.");
+
+    const defaultTypeByService: Record<string, string> = {
+      DOCUMENTS: "SIGN_EMPLOYMENT_CONTRACT",
+      EQUIPMENT: "PROVISION_PERIPHERALS",
+      PAYROLL: "COLLECT_TAX_DECLARATION",
+      BENEFITS: "BENEFITS_ELECTION",
+      TRAINING: "ROLE_SPECIFIC_TRAINING",
+      MANAGER: "PREPARE_DAY_ONE_AGENDA",
+    };
+    const taskType = (defaultTypeByService[input.service] ?? "ROLE_SPECIFIC_TRAINING") as any;
+    const sortOrder = plan.tasks.length + 1;
+    const dueDate = new Date(input.dueDate);
+    const earliestStartDate = new Date();
+
+    const created = await prisma.$transaction(async (tx) => {
+      const task = await tx.planTask.create({
+        data: {
+          planId,
+          title: input.title,
+          description: input.description ?? null,
+          taskType,
+          service: input.service as any,
+          ownerRole: input.ownerRole as any,
+          authorityClass: (input.authorityClass ?? "ROUTINE") as any,
+          origin: "HUMAN_ADDED",
+          reviewState: "OK",
+          status: "NOT_STARTED",
+          dueDate,
+          earliestStartDate,
+          sortOrder,
+        },
+      });
+
+      if (plan.status === "APPROVED" || plan.status === "IN_PROGRESS") {
+        await this.initializeDownstreamWorkflow(tx, task, plan.employeeId);
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: actor.userId,
+          actorRole: actor.role,
+          action: "task.created_manually",
+          resourceType: "PlanTask",
+          resourceId: task.id,
+          after: { title: task.title, service: task.service, ownerRole: task.ownerRole },
+        },
+      });
+
+      return task;
+    });
+
+    return created;
   }
 }
 

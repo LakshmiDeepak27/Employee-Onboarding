@@ -468,6 +468,34 @@ export function Login() {
                     <div className="auth-quick-role-email">david.manager@clyora</div>
                     <div className="auth-quick-role-desc">Direct reports · Welcome buddy · Day-one checklist</div>
                   </button>
+
+                  <button
+                    type="button"
+                    className="auth-quick-role-btn it"
+                    onClick={() => void handleDemoLogin("vikram.it@clyora")}
+                    disabled={loading || !!loggingInAs || startingSso}
+                  >
+                    <div className="auth-quick-role-badge">IT Administrator</div>
+                    <div className="auth-quick-role-name">
+                      {loggingInAs === "vikram.it@clyora" ? "Signing in as Vikram Malhotra…" : "Sign In as Vikram Malhotra (IT)"}
+                    </div>
+                    <div className="auth-quick-role-email">vikram.it@clyora</div>
+                    <div className="auth-quick-role-desc">Hardware fulfillment · Laptop imaging · PowerShell pack</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="auth-quick-role-btn employee"
+                    onClick={() => void handleDemoLogin("priya.dev@clyora")}
+                    disabled={loading || !!loggingInAs || startingSso}
+                  >
+                    <div className="auth-quick-role-badge">New Hire (Engineer)</div>
+                    <div className="auth-quick-role-name">
+                      {loggingInAs === "priya.dev@clyora" ? "Signing in as Priya Sharma…" : "Sign In as Priya Sharma (New Hire)"}
+                    </div>
+                    <div className="auth-quick-role-email">priya.dev@clyora</div>
+                    <div className="auth-quick-role-desc">Employee portal · Document upload · POSH training · Benefits</div>
+                  </button>
                 </div>
               </div>
 

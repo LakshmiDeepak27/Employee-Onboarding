@@ -20,6 +20,8 @@ import {
   Calendar,
   Sparkles,
   CheckCircle2,
+  Pencil,
+  X,
 } from "lucide-react";
 import {
   CreateEmployeeRequestSchema,
@@ -1297,6 +1299,46 @@ export function TaskRows({
 }) {
   const { user } = useSession();
   const cache = useQueryClient();
+  const [editingTask, setEditingTask] = useState<PlanTask | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editOwnerRole, setEditOwnerRole] = useState<any>("HR");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editReviewState, setEditReviewState] = useState<"OK" | "NEEDS_REVIEW">("OK");
+  const [editReason, setEditReason] = useState("");
+  const [editError, setEditError] = useState("");
+
+  const openEdit = (t: PlanTask) => {
+    setEditingTask(t);
+    setEditTitle(t.title);
+    setEditDescription(t.description ?? "");
+    setEditOwnerRole(t.ownerRole);
+    setEditDueDate(t.dueDate ? (typeof t.dueDate === "string" ? t.dueDate.slice(0, 10) : new Date(t.dueDate).toISOString().slice(0, 10)) : "");
+    setEditReviewState(t.reviewState === "OK" ? "OK" : "NEEDS_REVIEW");
+    setEditReason("");
+    setEditError("");
+  };
+
+  const saveEdit = useMutation({
+    mutationFn: async () => {
+      if (!editingTask) return;
+      if (!editTitle.trim()) throw new Error("Task title is required.");
+      return api.plans.updateTask(editingTask.planId, editingTask.id, {
+        title: editTitle.trim(),
+        description: editDescription.trim() || undefined,
+        ownerRole: editOwnerRole,
+        dueDate: editDueDate || undefined,
+        reviewState: editReviewState,
+        reason: editReason.trim() || "Task customized by HR Administrator",
+      });
+    },
+    onSuccess: () => {
+      setEditingTask(null);
+      void cache.invalidateQueries();
+    },
+    onError: (err: any) => setEditError(err.message || "Failed to update task."),
+  });
+
   const update = useMutation({
     mutationFn: ({
       t,
@@ -1374,50 +1416,64 @@ export function TaskRows({
                     <td>
                       <Badge value={t.status} />
                     </td>
-                    <td>
-                      {review && can(user, "plan.approve") ? (
-                        <button
-                          className={`button small ${t.reviewState === "OK" ? "secondary" : "primary"}`}
-                          disabled={update.isPending}
-                          onClick={() =>
-                            update.mutate({
-                              t,
-                              reviewState:
-                                t.reviewState === "OK" ? "NEEDS_REVIEW" : "OK",
-                            })
-                          }
-                          style={{ fontSize: "12px", gap: "4px" }}
-                        >
-                          {update.isPending && update.variables?.t.id === t.id ? (
-                            "Saving…"
-                          ) : t.reviewState === "OK" ? (
-                            <>
-                              <CheckCircle2 size={13} color="#16a34a" /> Reviewed
-                            </>
-                          ) : (
-                            "Mark reviewed"
-                          )}
-                        </button>
-                      ) : t.status === "COMPLETED" || t.status === "SKIPPED" ? (
-                        <Badge value={t.reviewState} />
-                      ) : workspaceFor(user!) === "manager" && t.service === "MANAGER" ? (
-                        <Link className="action-btn-styled" to="/manager/tasks">
-                          Open manager task <ArrowRight size={13} />
-                        </Link>
-                      ) : workspaceFor(user!) === "employee" && ["DOCUMENTS", "TRAINING", "BENEFITS"].includes(t.service) ? (
-                        <Link
-                          className="action-btn-styled"
-                          to={`/employee/${t.service.toLowerCase() === "documents" ? "documents" : t.service.toLowerCase()}`}
-                        >
-                          Continue task <ArrowRight size={13} />
-                        </Link>
-                      ) : workspaceFor(user!) === "hr" ? (
-                        <Link className="action-btn-styled" to={hrAction.path}>
-                          {hrAction.label} <ArrowRight size={13} />
-                        </Link>
-                      ) : (
-                        <span className="muted" style={{ fontSize: "12px" }}>Assigned to {role.label}</span>
-                      )}
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        {review && can(user, "plan.approve") ? (
+                          <button
+                            className={`button small ${t.reviewState === "OK" ? "secondary" : "primary"}`}
+                            disabled={update.isPending}
+                            onClick={() =>
+                              update.mutate({
+                                t,
+                                reviewState:
+                                  t.reviewState === "OK" ? "NEEDS_REVIEW" : "OK",
+                              })
+                            }
+                            style={{ fontSize: "12px", gap: "4px" }}
+                          >
+                            {update.isPending && update.variables?.t.id === t.id ? (
+                              "Saving…"
+                            ) : t.reviewState === "OK" ? (
+                              <>
+                                <CheckCircle2 size={13} color="#16a34a" /> Reviewed
+                              </>
+                            ) : (
+                              "Mark reviewed"
+                            )}
+                          </button>
+                        ) : t.status === "COMPLETED" || t.status === "SKIPPED" ? (
+                          <Badge value={t.reviewState} />
+                        ) : workspaceFor(user!) === "manager" && t.service === "MANAGER" ? (
+                          <Link className="action-btn-styled" to="/manager/tasks">
+                            Open manager task <ArrowRight size={13} />
+                          </Link>
+                        ) : workspaceFor(user!) === "employee" && ["DOCUMENTS", "TRAINING", "BENEFITS"].includes(t.service) ? (
+                          <Link
+                            className="action-btn-styled"
+                            to={`/employee/${t.service.toLowerCase() === "documents" ? "documents" : t.service.toLowerCase()}`}
+                          >
+                            Continue task <ArrowRight size={13} />
+                          </Link>
+                        ) : workspaceFor(user!) === "hr" ? (
+                          <Link className="action-btn-styled" to={hrAction.path}>
+                            {hrAction.label} <ArrowRight size={13} />
+                          </Link>
+                        ) : (
+                          <span className="muted" style={{ fontSize: "12px" }}>Assigned to {role.label}</span>
+                        )}
+
+                        {can(user, "task.update") && t.status !== "COMPLETED" && (
+                          <button
+                            type="button"
+                            className="button secondary small"
+                            style={{ fontSize: "12px", padding: "4px 8px", gap: "3px" }}
+                            onClick={() => openEdit(t)}
+                            title="Edit task title, due date, or owner"
+                          >
+                            <Pencil size={11} /> Edit
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1427,6 +1483,106 @@ export function TaskRows({
         </div>
       ) : (
         <Empty title="No tasks found" />
+      )}
+
+      {editingTask && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "12px",
+              maxWidth: "520px",
+              width: "100%",
+              padding: "24px",
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>Edit Onboarding Task</h3>
+              <button
+                type="button"
+                onClick={() => setEditingTask(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {editError && <p className="notice danger" style={{ marginBottom: "12px" }}>{editError}</p>}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveEdit.mutate();
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+            >
+              <label className="form-field">
+                <span className="field-label">Task Title</span>
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required />
+              </label>
+
+              <label className="form-field">
+                <span className="field-label">Description & Instructions</span>
+                <textarea rows={3} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+              </label>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <label className="form-field">
+                  <span className="field-label">Owner Role</span>
+                  <select value={editOwnerRole} onChange={(e) => setEditOwnerRole(e.target.value as any)}>
+                    <option value="HR">HR Administrator</option>
+                    <option value="MANAGER">People Manager</option>
+                    <option value="IT">IT Operations</option>
+                    <option value="EMPLOYEE">New Employee</option>
+                  </select>
+                </label>
+
+                <label className="form-field">
+                  <span className="field-label">Due Date</span>
+                  <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                </label>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <label className="form-field">
+                  <span className="field-label">Review Decision</span>
+                  <select value={editReviewState} onChange={(e) => setEditReviewState(e.target.value as any)}>
+                    <option value="OK">Reviewed (OK)</option>
+                    <option value="NEEDS_REVIEW">Needs Review</option>
+                  </select>
+                </label>
+
+                <label className="form-field">
+                  <span className="field-label">Modification Note</span>
+                  <input placeholder="Reason for change" value={editReason} onChange={(e) => setEditReason(e.target.value)} />
+                </label>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" }}>
+                <button type="button" className="button secondary" onClick={() => setEditingTask(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="button primary" disabled={saveEdit.isPending}>
+                  {saveEdit.isPending ? "Saving changes…" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </>
   );
@@ -1548,6 +1704,37 @@ export function PlanDetails() {
   const [ack, setAck] = useState(false);
   const [finalAck, setFinalAck] = useState(false);
   const [reason, setReason] = useState("");
+
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newService, setNewService] = useState<any>("DOCUMENTS");
+  const [newOwnerRole, setNewOwnerRole] = useState<any>("HR");
+  const [newDueDate, setNewDueDate] = useState("");
+  const [addTaskError, setAddTaskError] = useState("");
+
+  const addTaskMutation = useMutation({
+    mutationFn: async () => {
+      if (!newTitle.trim()) throw new Error("Task title is required.");
+      if (!newDueDate) throw new Error("Due date is required.");
+      return api.plans.createTask(planId!, {
+        title: newTitle.trim(),
+        description: newDescription.trim() || undefined,
+        service: newService,
+        ownerRole: newOwnerRole,
+        dueDate: newDueDate,
+        authorityClass: "ROUTINE",
+      });
+    },
+    onSuccess: () => {
+      setShowAddTask(false);
+      setNewTitle("");
+      setNewDescription("");
+      setAddTaskError("");
+      void cache.invalidateQueries();
+    },
+    onError: (err: any) => setAddTaskError(err.message || "Failed to add task."),
+  });
   const q = useQuery({
     queryKey: ["plan", planId],
     queryFn: () => api.plans.get(planId!),
@@ -1708,10 +1895,29 @@ export function PlanDetails() {
             </div>
             <div className="panel">
               {tab === "Tasks" && (
-                <TaskRows
-                  tasks={p.tasks}
-                  review={["DRAFT", "AWAITING_APPROVAL"].includes(p.status)}
-                />
+                <>
+                  {can(user, "plan.approve") && p.status !== "COMPLETED" && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "14px" }}>
+                      <button
+                        type="button"
+                        className="button primary small"
+                        style={{ fontSize: "12.5px", gap: "6px" }}
+                        onClick={() => {
+                          setShowAddTask(true);
+                          if (p.startDate) {
+                            setNewDueDate(typeof p.startDate === "string" ? p.startDate.slice(0, 10) : new Date(p.startDate).toISOString().slice(0, 10));
+                          }
+                        }}
+                      >
+                        <Plus size={13} /> Add Custom Task
+                      </button>
+                    </div>
+                  )}
+                  <TaskRows
+                    tasks={p.tasks}
+                    review={["DRAFT", "AWAITING_APPROVAL"].includes(p.status)}
+                  />
+                </>
               )}
               {tab === "Findings" && (
                 <QueryState query={findings}>
@@ -1885,6 +2091,118 @@ export function PlanDetails() {
                   </button>
                 </div>
               </Panel>
+            )}
+
+            {showAddTask && (
+              <div
+                role="dialog"
+                aria-modal="true"
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(15, 23, 42, 0.6)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 9999,
+                  padding: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#ffffff",
+                    borderRadius: "12px",
+                    maxWidth: "520px",
+                    width: "100%",
+                    padding: "24px",
+                    boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                    <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--ink)" }}>Add Custom Onboarding Task</h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddTask(false)}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {addTaskError && <p className="notice danger" style={{ marginBottom: "12px" }}>{addTaskError}</p>}
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      addTaskMutation.mutate();
+                    }}
+                    style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+                  >
+                    <label className="form-field">
+                      <span className="field-label">Task Title</span>
+                      <input
+                        placeholder="e.g. Complete Security Badge Request & Photo Upload"
+                        value={newTitle}
+                        onChange={(e) => setNewTitle(e.target.value)}
+                        required
+                      />
+                    </label>
+
+                    <label className="form-field">
+                      <span className="field-label">Description & Instructions</span>
+                      <textarea
+                        rows={3}
+                        placeholder="Detailed instructions or prerequisites for the assignee..."
+                        value={newDescription}
+                        onChange={(e) => setNewDescription(e.target.value)}
+                      />
+                    </label>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <label className="form-field">
+                        <span className="field-label">Service Area</span>
+                        <select value={newService} onChange={(e) => setNewService(e.target.value as any)}>
+                          <option value="DOCUMENTS">Documents & Compliance</option>
+                          <option value="EQUIPMENT">Equipment & IT Provisioning</option>
+                          <option value="PAYROLL">Payroll & Compensation</option>
+                          <option value="BENEFITS">Benefits & Health Insurance</option>
+                          <option value="TRAINING">Training & Certifications</option>
+                          <option value="MANAGER">Manager Setup & Welcome</option>
+                        </select>
+                      </label>
+
+                      <label className="form-field">
+                        <span className="field-label">Owner Role</span>
+                        <select value={newOwnerRole} onChange={(e) => setNewOwnerRole(e.target.value as any)}>
+                          <option value="HR">HR Administrator</option>
+                          <option value="MANAGER">People Manager</option>
+                          <option value="IT">IT Operations</option>
+                          <option value="EMPLOYEE">New Employee</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="form-field">
+                      <span className="field-label">Due Date</span>
+                      <input
+                        type="date"
+                        value={newDueDate}
+                        onChange={(e) => setNewDueDate(e.target.value)}
+                        required
+                      />
+                    </label>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" }}>
+                      <button type="button" className="button secondary" onClick={() => setShowAddTask(false)}>
+                        Cancel
+                      </button>
+                      <button type="submit" className="button primary" disabled={addTaskMutation.isPending}>
+                        {addTaskMutation.isPending ? "Adding task…" : "Create Task"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
             )}
           </>
         )}
