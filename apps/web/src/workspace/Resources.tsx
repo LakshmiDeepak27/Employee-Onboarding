@@ -271,12 +271,9 @@ export function ServicePage({ service }: { service: Service }) {
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            background: "#eff6ff",
-            borderColor: "#bfdbfe",
-            color: "#1e40af",
           }}
         >
-          <ShieldCheck size={18} color="#2563eb" />
+          <ShieldCheck size={18} />
           <span>
             <strong>Hiring Manager Ownership:</strong> First-day agendas, buddy assignments, and team introductions are owned and completed by the new hire’s direct People Manager (e.g. David Chen). This view is read-only for HR oversight.
           </span>

@@ -1033,7 +1033,7 @@ export function EmployeeDetails({ self = false }: { self?: boolean }) {
                   {displayedPlanId ? (
                     <div className="active-plan-card">
                       <div className="active-plan-header">
-                        <span className="badge" style={{ background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" }}>
+                        <span className="badge active">
                           {journeyStatus === "COMPLETED"
                             ? "Onboarding completed"
                             : "Onboarding plan available"}
@@ -1527,7 +1527,7 @@ export function TaskRows({
           <div className="modal-card">
             <div className="modal-header">
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div className="modal-header-icon" style={{ background: "#fef3c7", borderColor: "#fde68a", color: "#d97706" }}>
+                <div className="modal-header-icon" style={{ background: "rgba(245, 158, 11, 0.15)", borderColor: "rgba(245, 158, 11, 0.3)", color: "var(--warning)" }}>
                   <Pencil size={20} />
                 </div>
                 <div>
@@ -2159,13 +2159,11 @@ export function PlanDetails() {
                           gap: 14,
                           padding: "12px 16px",
                           borderRadius: "10px",
-                          background: "#fffbeb",
-                          border: "1px solid #fde68a",
                         }}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <ShieldCheck size={20} color="#d97706" />
-                          <span style={{ fontSize: "13px", color: "#92400e" }}>
+                          <ShieldCheck size={20} />
+                          <span style={{ fontSize: "13px" }}>
                             <strong>Compliance Check:</strong> Statutory payroll and identity tasks require HR review before dispatch.
                           </span>
                         </div>
