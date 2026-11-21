@@ -138,18 +138,24 @@ describe('payroll HTTP contract and workflow (isolated Prisma fake)', () => {
     expect(db.planTask.findUnique).not.toHaveBeenCalled();
   });
 
-  it.each(['manager', 'employee'])(
-    'denies every endpoint to %s, even if JWT role says admin',
-    async (role) => {
-      grants = Object.entries(ROLES.find((entry) => entry.key === role)!.grants).map(
-        ([key, scope]) => ({ key, scope }),
-      );
-      expect((await get()).status).toBe(403);
-      expect((await put()).status).toBe(403);
-      expect((await verify()).status).toBe(403);
-      expect(db.planTask.findUnique).not.toHaveBeenCalled();
-    },
-  );
+  it('denies every endpoint to manager, even if JWT role says admin', async () => {
+    grants = Object.entries(ROLES.find((entry) => entry.key === 'manager')!.grants).map(
+      ([key, scope]) => ({ key, scope }),
+    );
+    expect((await get()).status).toBe(403);
+    expect((await put()).status).toBe(403);
+    expect((await verify()).status).toBe(403);
+    expect(db.planTask.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('allows self-service input but denies verify to employee, even if JWT role says admin', async () => {
+    grants = Object.entries(ROLES.find((entry) => entry.key === 'employee')!.grants).map(
+      ([key, scope]) => ({ key, scope }),
+    );
+    expect([200, 404]).toContain((await get()).status);
+    expect([200, 404]).toContain((await put()).status);
+    expect((await verify()).status).toBe(403);
+  });
 
   it('enforces each operation permission independently', async () => {
     grants = [{ key: 'payroll.read', scope: 'ORG' }];

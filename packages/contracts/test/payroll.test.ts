@@ -19,11 +19,17 @@ describe('shared payroll contract', () => {
     expect(VerifyPayrollRequestSchema.safeParse({ acknowledgement: false }).success).toBe(false);
     expect(VerifyPayrollRequestSchema.safeParse({ acknowledgement: true }).success).toBe(true);
   });
-  it('grants payroll only to HR admin in the current catalog', () => {
+  it('grants payroll verification only to HR admin, with self-service payroll input for employees', () => {
     for (const role of ROLES) {
-      expect(Object.keys(role.grants).filter((key) => key.startsWith('payroll.')).length).toBe(
-        role.key === 'hr_admin' ? 3 : 0,
-      );
+      if (role.key === 'hr_admin') {
+        expect(Object.keys(role.grants).filter((key) => key.startsWith('payroll.')).length).toBe(3);
+        expect(role.grants['payroll.verify']).toBeDefined();
+      } else if (role.key === 'employee') {
+        expect(Object.keys(role.grants).filter((key) => key.startsWith('payroll.')).length).toBe(2);
+        expect(role.grants['payroll.verify']).toBeUndefined();
+      } else {
+        expect(Object.keys(role.grants).filter((key) => key.startsWith('payroll.')).length).toBe(0);
+      }
     }
   });
 });
