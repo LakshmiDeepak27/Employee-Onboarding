@@ -32,7 +32,6 @@ import {
   ChevronUp,
   RefreshCw,
   X,
-  ChevronRight,
 } from "lucide-react";
 import { api, request, can, getAccessToken, ApiError } from "../lib/api";
 import { useSession, workspaceFor } from "./session";
@@ -1065,14 +1064,7 @@ export function Settings() {
 
   return (
     <div className="clyora-settings-page">
-      {/* 1. Breadcrumbs */}
-      <div className="clyora-breadcrumbs">
-        <Link to={`/${w}/dashboard`}>Workspace</Link>
-        <ChevronRight size={13} />
-        <span>Account settings</span>
-      </div>
-
-      {/* 2. Page Header */}
+      {/* Page Header */}
       <div className="clyora-settings-header">
         <div className="clyora-settings-title-group">
           <h1>Account settings</h1>

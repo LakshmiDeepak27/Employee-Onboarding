@@ -209,36 +209,119 @@ export async function answerChat(
     );
   }
 
-  // 2. Fetch real-time system stats for company context
+  // 2. Fetch real-time system stats from database
   let empCount = 0;
+  let completedPlansCount = 0;
+  let pendingPlansCount = 0;
   let activePlansCount = 0;
+  let pendingTasksCount = 0;
+  let completedTasksCount = 0;
   let deptNames = 'Engineering, Product, People Operations, IT, Finance';
+  let dbAvailable = false;
+
   try {
-    const [eCount, pCount, depts] = await Promise.all([
+    const [eCount, completedPlans, pendingPlans, pendingTasks, completedTasks, depts] = await Promise.all([
       prisma.employee.count(),
+      prisma.onboardingPlan.count({ where: { status: 'COMPLETED' } }),
       prisma.onboardingPlan.count({
         where: {
           status: { in: ['DRAFT', 'AWAITING_APPROVAL', 'APPROVED', 'IN_PROGRESS', 'AWAITING_COMPLETION_APPROVAL'] },
         },
       }),
+      prisma.planTask.count({ where: { status: { in: ['NOT_STARTED', 'IN_PROGRESS', 'BLOCKED'] } } }),
+      prisma.planTask.count({ where: { status: 'COMPLETED' } }),
       prisma.department.findMany({ select: { name: true }, take: 10 }),
     ]);
     empCount = eCount;
-    activePlansCount = pCount;
+    completedPlansCount = completedPlans;
+    pendingPlansCount = pendingPlans;
+    activePlansCount = pendingPlans;
+    pendingTasksCount = pendingTasks;
+    completedTasksCount = completedTasks;
     if (depts.length > 0) {
       deptNames = depts.map((d) => d.name).join(', ');
     }
+    dbAvailable = true;
   } catch {
-    // ignore
+    dbAvailable = false;
   }
 
-  // 3. Headcount / Organizational Queries
-  const HEADCOUNT_QUERY =
-    /\b(headcount|how many employees|employee count|total employees|number of employees|how many people|total staff|team size)\b/i;
+  // 3a. Completed Onboarding Queries
+  const COMPLETED_ONBOARDING_QUERY =
+    /\b(how many employees.*(completed|finished).*onboarding|completed onboarding|how many.*completed onboarding|onboarding completed count|employees.*completed onboarding)\b/i;
 
-  if (HEADCOUNT_QUERY.test(cleanMsg)) {
+  if (COMPLETED_ONBOARDING_QUERY.test(cleanMsg)) {
+    if (!dbAvailable) {
+      return {
+        answer: 'Database information is currently unavailable to retrieve completed onboarding records. Please try again shortly or check the Onboarding Plans tab.',
+        citations: [],
+        grounded: true,
+        provider: 'fallback',
+        refusal: null,
+      };
+    }
     return {
-      answer: `CLYORA currently manages **${empCount} registered employees** across ${deptNames}, with **${activePlansCount} active onboarding journeys** in flight. You can inspect individual employee profiles and progress under the Employees workspace.`,
+      answer: `${completedPlansCount} employees have successfully completed their onboarding process.`,
+      citations: [],
+      grounded: true,
+      provider: 'fallback',
+      refusal: null,
+      actionProposal: {
+        type: 'DOCUMENTS',
+        title: 'Onboarding Plans',
+        description: 'Review finalized onboarding records.',
+        actionLabel: 'View Completed Plans',
+        route: '/employees',
+      },
+    };
+  }
+
+  // 3b. Pending Onboarding Queries
+  const PENDING_ONBOARDING_QUERY =
+    /\b(how many employees.*pending.*onboarding|pending onboarding|how many.*in progress.*onboarding|onboarding pending count|employees.*pending onboarding|how many.*pending.*plans|pending onboarding plans)\b/i;
+
+  if (PENDING_ONBOARDING_QUERY.test(cleanMsg)) {
+    if (!dbAvailable) {
+      return {
+        answer: 'Database information is currently unavailable to retrieve pending onboarding records. Please try again shortly or check the Onboarding Plans tab.',
+        citations: [],
+        grounded: true,
+        provider: 'fallback',
+        refusal: null,
+      };
+    }
+    return {
+      answer: `${pendingPlansCount} employees are currently pending onboarding.`,
+      citations: [],
+      grounded: true,
+      provider: 'fallback',
+      refusal: null,
+      actionProposal: {
+        type: 'DOCUMENTS',
+        title: 'Active Onboarding Journeys',
+        description: 'Monitor in-progress onboarding plans.',
+        actionLabel: 'View Active Plans',
+        route: '/employees',
+      },
+    };
+  }
+
+  // 3c. Registered Employees / Headcount Queries
+  const REGISTERED_EMPLOYEES_QUERY =
+    /\b(how many employees.*(registered|in the system|in clyora|there|exist)|how many.*registered employees|registered employees|registered employee count|total registered employees|how many employees are registered|how many employees|employee count|total employees|number of employees|how many people|total staff|team size|headcount)\b/i;
+
+  if (REGISTERED_EMPLOYEES_QUERY.test(cleanMsg)) {
+    if (!dbAvailable) {
+      return {
+        answer: 'Database information is currently unavailable to retrieve registered employee counts. Please try again shortly or inspect the Employees directory.',
+        citations: [],
+        grounded: true,
+        provider: 'fallback',
+        refusal: null,
+      };
+    }
+    return {
+      answer: `There are currently ${empCount} employees registered in the Clyora system.`,
       citations: [],
       grounded: true,
       provider: 'fallback',
@@ -249,6 +332,36 @@ export async function answerChat(
         description: 'Browse active employee rosters and progress.',
         actionLabel: 'View Employees',
         route: '/employees',
+      },
+    };
+  }
+
+  // 3d. Pending Tasks Queries
+  const PENDING_TASKS_QUERY =
+    /\b(how many.*pending tasks|pending tasks count|how many tasks.*pending|tasks.*pending|what tasks are pending|pending task list|pending tasks)\b/i;
+
+  if (PENDING_TASKS_QUERY.test(cleanMsg)) {
+    if (!dbAvailable) {
+      return {
+        answer: 'Database information is currently unavailable to retrieve pending task counts. Please try again shortly or check your Work Queue.',
+        citations: [],
+        grounded: true,
+        provider: 'fallback',
+        refusal: null,
+      };
+    }
+    return {
+      answer: `There are currently ${pendingTasksCount} pending tasks requiring action across the organization.`,
+      citations: [],
+      grounded: true,
+      provider: 'fallback',
+      refusal: null,
+      actionProposal: {
+        type: 'DOCUMENTS',
+        title: 'Work Queue',
+        description: 'Review and action pending onboarding tasks.',
+        actionLabel: 'Open Work Queue',
+        route: '/tasks',
       },
     };
   }
@@ -545,37 +658,50 @@ export async function answerChat(
   if (client) {
     try {
       const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
-      const orgContext = `REAL-TIME ORGANIZATION & ENTERPRISE HCM CONTEXT:
-- Total registered employees in system: ${empCount}
-- Active onboarding journeys: ${activePlansCount}
+      const orgContext = `DATABASE INFORMATION & REAL-TIME ORGANIZATION STATS:
+- Database connectivity: ${dbAvailable ? 'CONNECTED' : 'UNAVAILABLE'}
+- Total registered employees in system: ${dbAvailable ? empCount : 'UNAVAILABLE'}
+- Completed onboarding count: ${dbAvailable ? completedPlansCount : 'UNAVAILABLE'}
+- Pending onboarding count: ${dbAvailable ? pendingPlansCount : 'UNAVAILABLE'}
+- Pending tasks count: ${dbAvailable ? pendingTasksCount : 'UNAVAILABLE'}
 - Company departments: ${deptNames}
 - HR Administrator: Asha Rao (asha.hr@clyora)
 - Engineering Manager: David Chen (david.manager@clyora)
 - Core System Principles: Dayforce HCM candidate-to-hire workflows, 8-Gate Safety DAG (zero hallucinated dates or tasks), Indian statutory floor (PF, Gratuity, POSH), Canadian statutory floor (TD1, OHS), UK statutory floor (RTW, GDPR).`;
 
-      const prompt = `You are CLYORA, an enterprise Intelligent Employee Onboarding Assistant for Clyora.
+      const prompt = `You are Clyora's intelligent employee onboarding assistant.
 User role: ${auth.roles.join(', ') || 'Employee'}
 User question: "${cleanMsg}"
 
 ${orgContext}
 
+IMPORTANT RESPONSE RULES:
+1. Understand the user's actual question before responding.
+2. For questions about employee counts, registered employees, onboarding status, pending tasks, or employee records, retrieve and use the database statistics provided above.
+3. Never answer database-related questions using generic onboarding guidance.
+4. Never fabricate employee counts or employee information.
+5. If database information is unavailable, clearly say so (e.g. "Database information is currently unavailable to retrieve registered employee counts.").
+6. Keep responses concise, professional, and conversational.
+
+Examples:
+User: How many employees are registered?
+Assistant: There are currently ${dbAvailable ? empCount : '[UNAVAILABLE]'} employees registered in the Clyora system.
+
+User: How many employees have completed onboarding?
+Assistant: ${dbAvailable ? completedPlansCount : '[UNAVAILABLE]'} employees have successfully completed their onboarding process.
+
+User: How many employees are pending onboarding?
+Assistant: ${dbAvailable ? pendingPlansCount : '[UNAVAILABLE]'} employees are currently pending onboarding.
+
+Always use actual database results instead of placeholder values.
+CRITICAL: NEVER mention dental or health insurance coverage unless the user specifically asked about dental or healthcare benefits!
+FORMATTING: Use clean bullet points (•) and bold titles. Do not output raw asterisk bullets (*).
+
 ${
   clauses.length > 0
     ? `OFFICIAL COMPANY POLICY SOURCES:
-${clauses.map((c) => `[ID: ${c.id}] ${c.heading || c.document.title}:\n${c.body}`).join('\n\n')}
-
-INSTRUCTIONS:
-1. Answer the user's question directly, clearly, warmly, and professionally.
-2. If asked about Dayforce, explain Dayforce HCM onboarding principles (candidate-to-hire transition, automated compliance, manager enablement, continuous payroll) and how CLYORA orchestrates these workflows.
-3. If asked about employee headcount, use the exact REAL-TIME ORGANIZATION DATA above (${empCount} employees, ${activePlansCount} active onboarding plans).
-4. CRITICAL: NEVER mention dental or health insurance coverage unless the user specifically asked about dental or healthcare benefits!
-5. FORMATTING: Use clean bullet points (•) and bold titles. Do not output raw asterisk bullets (*).`
-    : `INSTRUCTIONS:
-1. Answer the user's question directly, clearly, and warmly with enterprise HR expertise.
-2. If asked about Dayforce, explain Dayforce HCM onboarding principles (candidate-to-hire transition, automated compliance, manager enablement, continuous payroll) and how CLYORA orchestrates these workflows.
-3. If asked about employee headcount, use the exact REAL-TIME ORGANIZATION DATA above (${empCount} employees, ${activePlansCount} active onboarding plans).
-4. CRITICAL: NEVER mention dental or health insurance coverage unless the user specifically asked about dental or healthcare benefits!
-5. FORMATTING: Use clean bullet points (•) and bold titles. Do not output raw asterisk bullets (*).`
+${clauses.map((c) => `[ID: ${c.id}] ${c.heading || c.document.title}:\n${c.body}`).join('\n\n')}`
+    : ''
 }
 
 Provide a direct, helpful, and beautifully formatted answer.`;
