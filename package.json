@@ -38,7 +38,10 @@
     "setup": "npm ci && npm run db:generate && npm run db:deploy && npm run db:seed:reference && npm run db:seed:templates && npm run build",
     "auth:up": "docker update --restart unless-stopped eo-keycloak && docker start eo-keycloak || docker compose --profile local-identity up -d keycloak",
     "auth:stop": "docker stop eo-keycloak || docker compose --profile local-identity stop keycloak",
-    "auth:logs": "docker logs -f eo-keycloak"
+    "auth:logs": "docker logs -f eo-keycloak",
+    "profile:standalone": "node -e \"const fs=require('fs'); fs.copyFileSync('.env.local-standalone.example', '.env'); console.log('Configured .env for Local Standalone Profile.');\"",
+    "profile:keycloak": "node -e \"const fs=require('fs'); fs.copyFileSync('.env.local-keycloak.example', '.env'); console.log('Configured .env for Local Keycloak Profile.');\"",
+    "profile:production": "node -e \"const fs=require('fs'); fs.copyFileSync('.env.production.example', '.env.production'); console.log('Created .env.production template for Cloud Deployment.');\""
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

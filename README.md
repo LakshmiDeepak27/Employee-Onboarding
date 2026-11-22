@@ -183,6 +183,18 @@ Keycloak authenticates users with OpenID Connect. CLYORA’s API verifies the id
 - **Optional plan assistance:** Ollama or Gemini; deterministic baseline is available
 - **Local services:** Docker Compose
 
+## Runtime & Deployment Profiles
+
+CLYORA provides dedicated profiles for local development, enterprise containerized identity testing, and production deployment. See the full [CLYORA Architecture and Deployment Profiles Guide](docs/CLYORA_Architecture_and_Deployment_Profiles_Guide.md) for complete details.
+
+| Profile | Command | Description |
+|---|---|---|
+| **1. Local Standalone** | `npm run profile:standalone` | Rapid local testing & development. Zero Keycloak container required. Uses built-in 1-Click Role Login (`asha.hr@clyora`, `david.manager@clyora`, `vikram.it@clyora`, `priya.dev@clyora`). |
+| **2. Local Keycloak OIDC** | `npm run profile:keycloak` | Full enterprise local stack with Keycloak 26 OIDC (Code Flow + PKCE) and SMTP invite simulation. |
+| **3. Cloud Production** | `npm run profile:production` | Production deployment on Render, Railway, AWS ECS, GCP Cloud Run, or Kubernetes with managed PostgreSQL, SSL, and external OIDC. |
+
+---
+
 ## Run locally
 
 ### Prerequisites

@@ -2385,6 +2385,11 @@
       "UpdatePlanTaskRequest": {
         "type": "object",
         "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 140
+          },
           "ownerRole": {
             "type": "string",
             "enum": [
